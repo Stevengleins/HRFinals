@@ -11,12 +11,27 @@ Pass: Staff@123
 Employee:
 Email: employee1@gmail.com
 Pass: Employee@1
-<<<<<<< HEAD
-
 
 new update - 3/16/26
 updated db na rin;
 
+NEEDS:
 
-=======
->>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2
+ADMIN:
+-di ko pa sure 
+-major dashboard fixes
+
+HR STAFF:
+-Kimai Time like attendance for HR
+-Process ng payroll
+-some dashboard fixes
+
+EMPLOYEE:
+-Tasks
+-linis lang ng Dashboard
+-working and reflective leave management buttons
+-PHPmailer ng sahod nila.
+
+
+overall:
+-maybe onting linis nalang ng design??
