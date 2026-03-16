@@ -17,6 +17,14 @@ $employee = $result->fetch_assoc();
 $historyQuery = "SELECT * FROM leave_requests WHERE user_id = '$user_id' ORDER BY date_applied DESC";
 $historyResult = $mysql->query($historyQuery);
 
+// NEW: Check if the user already has a pending leave request
+$pendingQuery = "SELECT COUNT(*) as pending_count FROM leave_requests WHERE user_id = '$user_id' AND status = 'Pending'";
+$pendingResult = $mysql->query($pendingQuery);
+$hasPending = false;
+if ($pendingResult && $row = $pendingResult->fetch_assoc()) {
+    $hasPending = $row['pending_count'] > 0;
+}
+
 $usedLeaves = [];
 $balanceQuery = "SELECT leave_type, SUM(DATEDIFF(end_date, start_date) + 1) as used_days 
                  FROM leave_requests 
@@ -97,6 +105,13 @@ $el_left = max(0, 3 - ($usedLeaves['Emergency Leave'] ?? 0));
                 </div>
                 <form id="leaveForm" onsubmit="submitLeave(event)">
                     <div class="card-body">
+                        
+                        <?php if($hasPending): ?>
+                        <div class="alert alert-warning shadow-sm pb-2 pt-2">
+                            <i class="fas fa-clock mr-1"></i> You currently have a pending request waiting for HR approval.
+                        </div>
+                        <?php endif; ?>
+
                         <div class="form-group">
                             <label>Leave Type</label>
                             <select class="form-control" id="leave_type" onchange="updateDateLimits()" required>
@@ -210,6 +225,9 @@ $el_left = max(0, 3 - ($usedLeaves['Emergency Leave'] ?? 0));
       'Unpaid Leave': 999 // Unlimited
   };
 
+  // Pass the pending status flag to JavaScript
+  const hasPendingLeave = <?php echo $hasPending ? 'true' : 'false'; ?>;
+
   // Dynamically limit the End Date calendar based on available balance
   function updateDateLimits() {
       const leaveType = document.getElementById('leave_type').value;
@@ -251,6 +269,18 @@ $el_left = max(0, 3 - ($usedLeaves['Emergency Leave'] ?? 0));
 
   function submitLeave(event) {
       event.preventDefault(); 
+
+      // NEW: Intercept submission if they already have a pending leave
+      if (hasPendingLeave) {
+          Swal.fire({
+              icon: 'warning',
+              title: 'Request Already Pending',
+              text: 'You have already applied for a leave. Please wait for HR to approve or reject your current request before applying for a new one.',
+              confirmButtonColor: '#ffc107',
+              confirmButtonText: 'Understood'
+          });
+          return; // Stop the code here so the form doesn't submit
+      }
 
       let leaveType = document.getElementById('leave_type').value;
       let startDate = document.getElementById('start_date').value;

@@ -75,8 +75,9 @@ if (isset($_SESSION['user_id'])) {
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
-    <a href="../HR_Staff/hr_dashboard.php" class="brand-link text-center border-bottom-0">
-      <span class="brand-text font-weight-light"><strong>WORK</strong>FORCE</span>
+    <a href="hr_dashboard.php" class="brand-link d-flex align-items-center justify-content-center border-bottom-0">
+      <div class="mr-2" style="width: 18px; height: 18px; background: #e58f8a;"></div>
+      <span class="brand-text m-0 font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
     </a>
 
     <div class="sidebar">
