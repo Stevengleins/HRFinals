@@ -1,15 +1,18 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
+// Changed to check for HR Staff role
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'HR Staff') {
     header("Location: ../index.php");
     exit();
 }
 
 require '../database.php';
-include '../includes/admin_header.php'; 
 
-// names ng employee
+// Now includes the new HR specific header
+include '../includes/hr_header.php'; 
+
+// Fetch employee leave requests
 $query = "SELECT lr.*, u.first_name, u.last_name 
           FROM leave_requests lr 
           JOIN user u ON lr.user_id = u.user_id 
@@ -21,7 +24,7 @@ $result = $mysql->query($query);
   <div class="container-fluid">
     <div class="row mb-2">
       <div class="col-sm-6">
-        <h1 class="m-0">Leave Management</h1>
+        <h1 class="m-0 text-dark font-weight-bold">Leave Management</h1>
       </div>
     </div>
   </div>
@@ -29,9 +32,9 @@ $result = $mysql->query($query);
 
 <section class="content">
   <div class="container-fluid">
-    <div class="card shadow-sm">
-      <div class="card-header bg-dark text-white">
-        <h3 class="card-title"><i class="fas fa-calendar-check mr-2"></i> Employee Leave Requests</h3>
+    <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
+      <div class="card-header bg-dark text-white py-3 border-bottom-0">
+        <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;"><i class="fas fa-calendar-check mr-2"></i> Employee Leave Requests</h3>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
@@ -64,7 +67,7 @@ $result = $mysql->query($query);
                     <?php 
                         if($row['status'] == 'Approved') echo '<span class="badge badge-success px-2 py-1">Approved</span>';
                         elseif($row['status'] == 'Rejected') echo '<span class="badge badge-danger px-2 py-1">Rejected</span>';
-                        else echo '<span class="badge badge-warning px-2 py-1">Pending</span>';
+                        else echo '<span class="badge badge-warning px-2 py-1 text-dark">Pending</span>';
                     ?>
                 </td>
                 <td>
@@ -78,7 +81,7 @@ $result = $mysql->query($query);
               </tr>
               <?php endwhile; else: ?>
               <tr>
-                  <td colspan="7" class="text-center py-4">No leave requests found.</td>
+                  <td colspan="7" class="text-center py-4 text-muted">No leave requests found.</td>
               </tr>
               <?php endif; ?>
             </tbody>
@@ -91,25 +94,48 @@ $result = $mysql->query($query);
 
 <?php include '../includes/footer.php'; ?>
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 function updateLeaveStatus(leaveId, newStatus) {
-    let actionColor = newStatus === 'Approved' ? '#28a745' : '#dc3545';
-    let actionText = newStatus === 'Approved' ? 'Approve' : 'Reject';
-
-    Swal.fire({
-        title: `Are you sure?`,
-        text: `You are about to ${actionText.toLowerCase()} this leave request.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: actionColor,
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: `Yes, ${actionText} it!`
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = `process_leave.php?id=${leaveId}&status=${newStatus}`;
-        }
-    });
+    if (newStatus === 'Rejected') {
+        Swal.fire({
+            title: 'Reject Leave Request',
+            text: 'Please provide a reason for rejecting this leave:',
+            input: 'textarea',
+            inputPlaceholder: 'Enter your reason here...',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Submit Rejection',
+            preConfirm: (reason) => {
+                if (!reason.trim()) {
+                    Swal.showValidationMessage('A reason is required to reject a leave request.');
+                }
+                return reason;
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Encode the text so it can safely pass through the URL
+                let encodedReason = encodeURIComponent(result.value);
+                window.location.href = `process_leave.php?id=${leaveId}&status=${newStatus}&reason=${encodedReason}`;
+            }
+        });
+    } else {
+        // Standard approval confirmation
+        Swal.fire({
+            title: `Are you sure?`,
+            text: `You are about to approve this leave request.`,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: `Yes, Approve it!`
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = `process_leave.php?id=${leaveId}&status=${newStatus}`;
+            }
+        });
+    }
 }
 </script>
 
@@ -125,7 +151,7 @@ if (isset($_SESSION['status_icon']) && isset($_SESSION['status_title']) && isset
             icon: '$icon',
             title: '$title',
             text: '$text',
-            confirmButtonColor: '#3085d6'
+            confirmButtonColor: '#212529'
         });
     </script>
     ";

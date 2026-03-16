@@ -49,7 +49,10 @@ include('../includes/admin_header.php');
 
 <section class="content">
   <div class="container-fluid">
+<<<<<<< HEAD
+=======
     <!-- Summary Cards -->
+>>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2
     <div class="row mb-4">
       <div class="col-md-3">
         <div class="card shadow-sm border-left-primary" style="border-radius: 8px;">
@@ -93,22 +96,39 @@ include('../includes/admin_header.php');
           </div>
 
           <div class="card-body bg-light">
+<<<<<<< HEAD
+=======
             <!-- Date Filter -->
+>>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2
             <form method="GET" action="attendance.php" class="mb-4">
               <div class="row">
                 <div class="col-md-4">
                   <label class="text-dark">Select Date</label>
                   <input type="date" name="date" class="form-control shadow-sm" value="<?php echo htmlspecialchars($filter_date); ?>" required>
                 </div>
+<<<<<<< HEAD
+                <div class="col-md-6 d-flex align-items-end">
+                  <button type="submit" class="btn btn-dark shadow-sm px-4" style="border-radius: 6px;">
+                    <i class="fas fa-search mr-1"></i> Filter
+                  </button>
+                  
+                  <a href="export_daily_attendance.php?date=<?php echo htmlspecialchars($filter_date); ?>" class="btn btn-success shadow-sm px-4 ml-2" style="border-radius: 6px;">
+                    <i class="fas fa-file-excel mr-1"></i> Export to Excel
+                  </a>
+=======
                 <div class="col-md-2 d-flex align-items-end">
                   <button type="submit" class="btn btn-dark shadow-sm px-4" style="border-radius: 6px;">
                     <i class="fas fa-search mr-1"></i> Filter
                   </button>
+>>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2
                 </div>
               </div>
             </form>
 
+<<<<<<< HEAD
+=======
             <!-- Attendance Table -->
+>>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2
             <div class="table-responsive">
               <table class="table table-striped table-hover">
                 <thead class="thead-dark">
@@ -158,4 +178,8 @@ include('../includes/admin_header.php');
   </div>
 </section>
 
+<<<<<<< HEAD
 <?php include('../includes/footer.php'); ?>
+=======
+<?php include('../includes/footer.php'); ?>
+>>>>>>> 0a550111d0527521ffa47b7b98878b955e2641a2

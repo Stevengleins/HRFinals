@@ -7,8 +7,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
 }
 
 include('../database.php'); 
-include('../includes/header.php');
-
+include('../includes/admin_header.php');
 
 $admin_id = $_SESSION['user_id'];
 $adminQuery = "SELECT * FROM user WHERE user_id = '$admin_id'";
@@ -17,11 +16,7 @@ $adminProfile = $adminResult->fetch_assoc();
 
 $empCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE role = 'Employee'")->fetch_assoc()['count'];
 $hrCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE role = 'HR Staff'")->fetch_assoc()['count'];
-$activeCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE status = 1")->fetch_assoc()['count'];
-
 ?>
-<link rel="stylesheet" href="/Codes/HRFINALS/node_modules/admin-lte/dist/css/adminlte.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
 <div class="content-header">
   <div class="container-fluid">
@@ -62,20 +57,6 @@ $activeCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE status = 
           <a href="user_management.php" class="small-box-footer">More info <i class="fas fa-arrow-circle-right"></i></a>
         </div>
       </div>
-      
-      <div class="col-lg-4 col-12">
-        <div class="small-box bg-warning">
-          <div class="inner">
-            <h3><?php echo $activeCount; ?></h3>
-            <p>Active Accounts</p>
-          </div>
-          <div class="icon">
-            <i class="fas fa-user-check"></i>
-          </div>
-          <a href="user_management.php" class="small-box-footer">More info <i class="fas fa-arrow-circle-right"></i></a>
-        </div>
-      </div>
-    </div>
 
     <div class="row">
         <div class="col-md-4">

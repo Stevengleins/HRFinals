@@ -1,8 +1,0 @@
-{
-  "dependencies": {
-    "admin-lte": "^4.0.0-rc4",
-    "bootstrap": "^5.3.8",
-    "bootstrap-icons": "^1.13.1",
-    "sweetalert2": "^11.26.20"
-  }
-}

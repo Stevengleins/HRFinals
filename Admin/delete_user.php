@@ -1,29 +1,31 @@
 <?php
 session_start();
-include('../database.php');
 
-// Security: Only Admins can delete
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit();
 }
 
-if (isset($_GET['user_id'])) {
-    $id = mysqli_real_escape_string($conn, $_GET['user_id']);
+require '../database.php';
 
-    // Extra Security: Ensure we aren't deleting an Admin via URL manipulation
-    $check = "SELECT role FROM users WHERE user_id = '$id'";
-    $res = mysqli_query($conn, $check);
-    $user = mysqli_fetch_assoc($res);
+if (isset($_GET['id'])) {
+    $user_id = (int)$_GET['id'];
 
-    if ($user && $user['role'] !== 'Admin') {
-        $query = "DELETE FROM users WHERE user_id = '$id'";
-        if (mysqli_query($conn, $query)) {
-            $_SESSION['msg'] = "User deleted successfully!";
-        }
+    // Update the status to 0 (Archived) instead of actually deleting them
+    $query = "UPDATE user SET status = 0 WHERE user_id = $user_id";
+
+    if ($mysql->query($query)) {
+        $_SESSION['status_icon'] = 'success';
+        $_SESSION['status_title'] = 'Archived!';
+        $_SESSION['status_text'] = 'The user has been successfully archived.';
+    } else {
+        $_SESSION['status_icon'] = 'error';
+        $_SESSION['status_title'] = 'Error';
+        $_SESSION['status_text'] = 'Failed to archive user: ' . $mysql->error;
     }
 }
 
-header("Location: user_management.php"); // Redirect back
+// Redirect back to the active user management page
+header("Location: user_management.php");
 exit();
 ?>

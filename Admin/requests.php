@@ -10,7 +10,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
 
 
 include('../database.php'); 
-include('../includes/header.php');
+include('../includes/admin_header.php');
 ?>
 <!DOCTYPE html>
 <html lang="en">
