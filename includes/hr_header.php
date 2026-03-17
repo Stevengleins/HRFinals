@@ -118,19 +118,19 @@ if (isset($_SESSION['user_id'])) {
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" class="nav-link">
+            <a href="../HR_Staff/attendance.php" class="nav-link">
               <i class="nav-icon bi bi-clipboard-check-fill"></i>
               <p>Attendance</p>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" class="nav-link">
+            <a href="../HR_Staff/payrollhr.php" class="nav-link">
               <i class="nav-icon bi bi-wallet"></i>
               <p>Payroll</p>
             </a>
           </li>
           <li class="nav-item">
-            <a href="#" class="nav-link">
+            <a href="../HR_Staff/requesthr.php" class="nav-link">
               <i class="nav-icon bi bi-envelope-arrow-down"></i>
               <p>Requests</p>
             </a>
