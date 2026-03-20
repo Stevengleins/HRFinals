@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 17, 2026 at 06:04 AM
+-- Generation Time: Mar 20, 2026 at 11:17 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -40,7 +40,40 @@ CREATE TABLE `attendance` (
 --
 
 INSERT INTO `attendance` (`id`, `user_id`, `date`, `time_in`, `time_out`) VALUES
-(1, 13, '2026-03-17', '12:20:23', '12:21:06');
+(2, 3, '2026-03-20', '18:16:25', '18:16:31');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `employee_details`
+--
+
+CREATE TABLE `employee_details` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `first_name` varchar(100) NOT NULL,
+  `middle_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `gender` varchar(20) DEFAULT NULL,
+  `birth_date` date DEFAULT NULL,
+  `mobile_number` varchar(20) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `join_date` date DEFAULT NULL,
+  `position` varchar(100) DEFAULT NULL,
+  `role` varchar(50) NOT NULL,
+  `profile_image` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `employee_details`
+--
+
+INSERT INTO `employee_details` (`id`, `user_id`, `first_name`, `middle_name`, `last_name`, `email`, `gender`, `birth_date`, `mobile_number`, `address`, `join_date`, `position`, `role`, `profile_image`) VALUES
+(1, 12, 'Christian Meynard', 'Balbada', 'Samonte', 'meynardxt24@gmail.com', 'Male', '2005-02-24', '+639273262233', 'Block 6, Lot 21, Ipil St. Hillcrest Village, Caloocan City', '2026-03-20', 'Admin', 'Admin', NULL),
+(2, 2, 'Gerardo', 'Flores', 'Loquinario', 'staff123@gmail.com', 'Male', '0000-00-00', '', '', NULL, 'HR Staff', 'HR Staff', NULL),
+(3, 3, 'Jairus', '', 'Fernandez', 'employee1@gmail.com', 'Male', '0000-00-00', '', '', NULL, '', 'Employee', NULL),
+(4, 4, 'Karl Christian', 'Azucena', 'Telan', 'Karltitilan@gmail.com', '', '0000-00-00', '', '', NULL, 'Employee', 'Employee', NULL);
 
 -- --------------------------------------------------------
 
@@ -68,8 +101,7 @@ INSERT INTO `employee_requests` (`request_id`, `user_id`, `request_type`, `subje
 (3, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:16:49'),
 (4, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:17:17'),
 (5, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:24:29'),
-(6, 4, 'Other', 'qwe', 'asd', 'Reviewed', '2026-03-15 01:31:23'),
-(7, 11, 'Concern', 'May Error', 'Please Check the system for any major errors', 'Pending', '2026-03-17 02:12:33');
+(6, 4, 'Other', 'qwe', 'asd', 'Reviewed', '2026-03-15 01:31:23');
 
 -- --------------------------------------------------------
 
@@ -97,8 +129,6 @@ INSERT INTO `leave_requests` (`leave_id`, `user_id`, `leave_type`, `start_date`,
 (1, 3, 'Vacation Leave', '2026-03-12', '2026-03-15', 'Boracay', 'Rejected', '2026-03-12 05:42:58', NULL),
 (2, 3, 'Sick Leave', '2026-03-14', '2026-03-20', 'Stage 4 cancer', 'Rejected', '2026-03-12 07:25:20', NULL),
 (3, 3, 'Sick Leave', '2026-03-20', '2026-03-31', 'sakit', 'Rejected', '2026-03-13 04:06:33', 'hindi pwede'),
-(4, 11, 'Vacation Leave', '2026-03-17', '2026-03-25', 'Travel to tokyo', 'Rejected', '2026-03-16 14:17:55', 'Pangalawang beses na yan!'),
-(5, 11, 'Sick Leave', '2026-03-17', '2026-03-21', 'Mild Fever ', 'Rejected', '2026-03-16 18:10:40', 'Only 1 at a time'),
 (6, 3, 'Emergency Leave', '2026-03-20', '2026-03-22', 'Emergency', 'Pending', '2026-03-16 18:26:08', NULL);
 
 -- --------------------------------------------------------
@@ -141,30 +171,20 @@ CREATE TABLE `user` (
   `email` varchar(255) NOT NULL,
   `role` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `status` int(1) NOT NULL,
-  `employee_id` varchar(50) DEFAULT NULL,
-  `profile_image` varchar(255) DEFAULT NULL,
-  `gender` enum('Male','Female','Other') DEFAULT NULL,
-  `middle_name` varchar(100) DEFAULT NULL,
-  `birth_date` date DEFAULT NULL,
-  `mobile_number` varchar(15) DEFAULT NULL,
-  `address` text DEFAULT NULL,
-  `join_date` date DEFAULT NULL,
-  `position` varchar(100) DEFAULT NULL
+  `status` int(1) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `user`
 --
 
-INSERT INTO `user` (`user_id`, `first_name`, `last_name`, `email`, `role`, `password`, `status`, `employee_id`, `profile_image`, `gender`, `middle_name`, `birth_date`, `mobile_number`, `address`, `join_date`, `position`) VALUES
-(1, 'Christian Meynard', 'Samonte', 'admin123@gmail.com', 'Admin', '$2y$10$sWN9oEL3llvoS/EoSKDudeqAHC.k.BK.GjasVVC76DLjRDxwc/kZO', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(2, 'Gerardo', 'Loquinario', 'staff123@gmail.com', 'HR Staff', '$2y$10$UMiFyRXVZzAK7SQNoC9u3usr1xGy/Rhbbs.QwuaNLh/dUJsOpcfHK', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(3, 'Jairus', 'Fernandez', 'employee1@gmail.com', 'Employee', '$2y$10$G/OlgJjgCVlb3EDfBcPbUuDiRBbgAWcKkK3ZbgtKud389LUAs/HSK', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(4, 'Karl Christian', 'Telan', 'Karltitilan@gmail.com', 'Employee', '$2y$10$E.5RN.VbT5S7KzY7FdWSPurTrz3Fp8QAcXfJgQk2aydWziy6ATqCS', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(5, 'Karl', 'Jai', 'karljai1@gmail.com', 'Employee', '$2y$10$u/W0rywFIeny6Oepb70sROoxHf/mkl1J2vrRUqWhsBZ0KhalPD/XW', 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(11, 'Christian Meynard', 'Samonte', 'tiansamonte24@gmail.com', 'Employee', '$2y$10$lyD/uTstUyMvynyR8TMjiObXOmEy9h/dt4lnsMNpjn1cQIkVCwRXe', 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-(13, 'Gagam', 'Naruto', 'lucastraumen50@gmail.com', 'Employee', '$2y$10$GIxzqnqlHlm3csLi7X0xEuTIWApmBMc.9P6Qt4yWgqQk.aA1RCNMy', 1, 'EMP3', NULL, 'Male', 'Boy', '2026-03-05', '+639912345672', 'Kantotinyo City', '2026-03-17', 'Software Developer');
+INSERT INTO `user` (`user_id`, `first_name`, `last_name`, `email`, `role`, `password`, `status`) VALUES
+(1, 'Christian Meynard', 'Samonte', 'admin123@gmail.com', 'Admin', '$2y$10$sWN9oEL3llvoS/EoSKDudeqAHC.k.BK.GjasVVC76DLjRDxwc/kZO', 1),
+(2, 'Gerardo', 'Loquinario', 'staff123@gmail.com', 'HR Staff', '$2y$10$UMiFyRXVZzAK7SQNoC9u3usr1xGy/Rhbbs.QwuaNLh/dUJsOpcfHK', 1),
+(3, 'Jairus', 'Fernandez', 'employee1@gmail.com', 'Employee', '$2y$10$G/OlgJjgCVlb3EDfBcPbUuDiRBbgAWcKkK3ZbgtKud389LUAs/HSK', 1),
+(4, 'Karl Christian', 'Telan', 'Karltitilan@gmail.com', 'Employee', '$2y$10$E.5RN.VbT5S7KzY7FdWSPurTrz3Fp8QAcXfJgQk2aydWziy6ATqCS', 1),
+(5, 'Karl', 'Jai', 'karljai1@gmail.com', 'Employee', '$2y$10$u/W0rywFIeny6Oepb70sROoxHf/mkl1J2vrRUqWhsBZ0KhalPD/XW', 0),
+(12, 'Christian Meynard', 'Samonte', 'meynardxt24@gmail.com', 'Admin', '$2y$10$k3/gnaNWVMmLa2Dkoo7vge9ryjOoBs/iu20Ief85V2Cnz473Vu4TC', 1);
 
 --
 -- Indexes for dumped tables
@@ -175,6 +195,13 @@ INSERT INTO `user` (`user_id`, `first_name`, `last_name`, `email`, `role`, `pass
 --
 ALTER TABLE `attendance`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `employee_details`
+--
+ALTER TABLE `employee_details`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `user_id` (`user_id`);
 
 --
 -- Indexes for table `employee_requests`
@@ -201,8 +228,7 @@ ALTER TABLE `payroll`
 -- Indexes for table `user`
 --
 ALTER TABLE `user`
-  ADD PRIMARY KEY (`user_id`),
-  ADD UNIQUE KEY `employee_id` (`employee_id`);
+  ADD PRIMARY KEY (`user_id`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -212,7 +238,13 @@ ALTER TABLE `user`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `employee_details`
+--
+ALTER TABLE `employee_details`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `employee_requests`
@@ -236,11 +268,17 @@ ALTER TABLE `payroll`
 -- AUTO_INCREMENT for table `user`
 --
 ALTER TABLE `user`
-  MODIFY `user_id` int(255) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `user_id` int(255) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- Constraints for dumped tables
 --
+
+--
+-- Constraints for table `employee_details`
+--
+ALTER TABLE `employee_details`
+  ADD CONSTRAINT `employee_details_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `employee_requests`
