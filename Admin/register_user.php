@@ -19,13 +19,11 @@ $first_name_val = '';
 $last_name_val = '';
 $email_val = '';
 $role_val = '';
-$employee_id_val = '';
 $middle_name_val = '';
 $gender_val = '';
 $birth_date_val = '';
 $mobile_number_val = '';
 $address_val = '';
-$join_date_val = '';
 $position_val = '';
 $errors = [];
 
@@ -53,26 +51,31 @@ if (isset($_POST['register_user'])) {
     $last_name  = trim($_POST['last_name']);
     $email      = trim($_POST['email']); 
     $role       = isset($_POST['role']) ? $_POST['role'] : '';
-    $employee_id = trim($_POST['employee_id']);
     $gender = isset($_POST['gender']) ? $_POST['gender'] : '';
     $birth_date = $_POST['birth_date'];
     $mobile_number = trim($_POST['mobile_number']);
     $address = trim($_POST['address']);
-    $join_date = $_POST['join_date'];
     $position = trim($_POST['position']);
     $status     = 1; 
+
+    // Automatically set the join date to today based on local timezone
+    date_default_timezone_set('Asia/Manila');
+    $join_date = date('Y-m-d'); 
+    
+    // SMART FORMATTING: Automatically convert "09..." to "+639..."
+    if (preg_match("/^09\d{9}$/", $mobile_number)) {
+        $mobile_number = '+63' . substr($mobile_number, 1);
+    }
 
     $first_name_val = htmlspecialchars($first_name);
     $last_name_val = htmlspecialchars($last_name);
     $email_val = htmlspecialchars($email);
     $role_val = htmlspecialchars($role);
-    $employee_id_val = htmlspecialchars($employee_id);
     $middle_name_val = htmlspecialchars($middle_name);
     $gender_val = htmlspecialchars($gender);
     $birth_date_val = htmlspecialchars($birth_date);
-    $mobile_number_val = htmlspecialchars($mobile_number);
+    $mobile_number_val = htmlspecialchars($mobile_number); 
     $address_val = htmlspecialchars($address);
-    $join_date_val = htmlspecialchars($join_date);
     $position_val = htmlspecialchars($position);
 
     if (!preg_match("/^[a-zA-Z\s\-]+$/", $first_name) || !preg_match("/^[a-zA-Z\s\-]+$/", $last_name)) {
@@ -80,11 +83,6 @@ if (isset($_POST['register_user'])) {
         $_SESSION['status_icon'] = 'error';
         $_SESSION['status_title'] = 'Invalid Name';
         $_SESSION['status_text'] = 'Names must contain letters only.';
-    } elseif (empty($employee_id)) {
-        $errors['employee_id'] = true;
-        $_SESSION['status_icon'] = 'error';
-        $_SESSION['status_title'] = 'Employee ID Required';
-        $_SESSION['status_text'] = 'Please provide an Employee ID.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors['email'] = true; 
         $_SESSION['status_icon'] = 'error';
@@ -94,18 +92,19 @@ if (isset($_POST['register_user'])) {
         $errors['mobile'] = true;
         $_SESSION['status_icon'] = 'error';
         $_SESSION['status_title'] = 'Invalid Mobile Number';
-        $_SESSION['status_text'] = 'Mobile number must start with +639 and be 13 digits long.';
-    } elseif (empty($birth_date) || empty($join_date)) {
+        $_SESSION['status_text'] = 'Please enter a valid PH mobile number (e.g., 09123456789 or +639123456789).';
+    } elseif (empty($birth_date)) {
         $errors['date'] = true;
         $_SESSION['status_icon'] = 'error';
         $_SESSION['status_title'] = 'Date Required';
-        $_SESSION['status_text'] = 'Please provide birth date and join date.';
-    } elseif (empty($gender) || empty($position) || empty($address)) {
+        $_SESSION['status_text'] = 'Please provide a birth date.';
+    } elseif (empty($gender) || empty($position) || empty($address) || empty($role)) {
         $errors['required'] = true;
         $_SESSION['status_icon'] = 'error';
         $_SESSION['status_title'] = 'Required Fields';
         $_SESSION['status_text'] = 'Please fill in all required fields.';
     } else {
+        // Check if email already exists in the `user` table
         $checkStmt = $mysql->prepare("SELECT email FROM user WHERE email = ?");
         $checkStmt->bind_param("s", $email);
         $checkStmt->execute();
@@ -117,43 +116,49 @@ if (isset($_POST['register_user'])) {
             $_SESSION['status_title'] = 'Email Exists';
             $_SESSION['status_text'] = 'An account with that email already exists.';
         } else {
-            $checkEmpId = $mysql->prepare("SELECT employee_id FROM user WHERE employee_id = ?");
-            $checkEmpId->bind_param("s", $employee_id);
-            $checkEmpId->execute();
-            if ($checkEmpId->get_result()->num_rows > 0) {
-                $errors['employee_id'] = true;
-                $_SESSION['status_icon'] = 'error';
-                $_SESSION['status_title'] = 'Employee ID Exists';
-                $_SESSION['status_text'] = 'An account with that Employee ID already exists.';
-            } else {
-                $profile_image_path = null;
-                if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
-                    $upload_dir = '../uploads/profile_images/';
-                    if (!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0755, true);
-                    }
-                    $file_name = uniqid() . '_' . basename($_FILES['profile_image']['name']);
-                    $target_file = $upload_dir . $file_name;
-                    $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
-                    
-                    // Check if image file is a actual image or fake image
-                    $check = getimagesize($_FILES['profile_image']['tmp_name']);
-                    if ($check !== false) {
-                        if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_file)) {
-                            $profile_image_path = 'uploads/profile_images/' . $file_name;
-                        }
+            $profile_image_path = null;
+            if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
+                $upload_dir = '../uploads/profile_images/';
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
+                }
+                $file_name = uniqid() . '_' . basename($_FILES['profile_image']['name']);
+                $target_file = $upload_dir . $file_name;
+                
+                // Check if image file is a real image
+                $check = getimagesize($_FILES['profile_image']['tmp_name']);
+                if ($check !== false) {
+                    if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_file)) {
+                        $profile_image_path = 'uploads/profile_images/' . $file_name;
                     }
                 }
-                
-                // Generate and Hash the Temporary Password
-                $temp_password = generateTempPassword();
-                $hashed_password = password_hash($temp_password, PASSWORD_DEFAULT);
-                
-                // Insert into Database
-                $insertStmt = $mysql->prepare("INSERT INTO user (first_name, middle_name, last_name, email, password, role, status, employee_id, gender, birth_date, mobile_number, address, join_date, position, profile_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $insertStmt->bind_param("ssssssissssssss", $first_name, $middle_name, $last_name, $email, $hashed_password, $role, $status, $employee_id, $gender, $birth_date, $mobile_number, $address, $join_date, $position, $profile_image_path);
+            }
             
-            if ($insertStmt->execute()) {
+            // Generate and Hash the Temporary Password
+            $temp_password = generateTempPassword();
+            $hashed_password = password_hash($temp_password, PASSWORD_DEFAULT);
+            
+            // ==========================================
+            // BEGIN TRANSACTION: Insert into TWO tables
+            // ==========================================
+            $mysql->begin_transaction();
+
+            try {
+                // Table 1: Insert into `user` (Authentication Table)
+                $insertUser = $mysql->prepare("INSERT INTO user (first_name, last_name, email, password, role, status) VALUES (?, ?, ?, ?, ?, ?)");
+                $insertUser->bind_param("sssssi", $first_name, $last_name, $email, $hashed_password, $role, $status);
+                $insertUser->execute();
+                
+                // Get the auto-generated ID from the user table to link them
+                $new_user_id = $mysql->insert_id;
+
+                // Table 2: Insert into `employee_details` (Profile Table - Synced)
+                $insertEmp = $mysql->prepare("INSERT INTO employee_details (user_id, first_name, middle_name, last_name, email, gender, birth_date, mobile_number, address, join_date, position, role, profile_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $insertEmp->bind_param("issssssssssss", $new_user_id, $first_name, $middle_name, $last_name, $email, $gender, $birth_date, $mobile_number, $address, $join_date, $position, $role, $profile_image_path);
+                $insertEmp->execute();
+
+                // If both queries succeed without errors, permanently save to the database
+                $mysql->commit();
                 
                 // === PHPMailer Setup ===
                 $mail = new PHPMailer(true);
@@ -164,14 +169,13 @@ if (isset($_POST['register_user'])) {
                     $mail->SMTPAuth   = true;
                     
                     // IMPORTANT: You MUST change these two lines to your actual Google App Password details
-                    // Otherwise, Google will keep giving you the "SMTP Error: Could not authenticate" error.
                     $mail->Username   = 'samontetn@gmail.com'; 
-                    $mail->Password   = 'knekilwtrlbjcfkw';     
+                    $mail->Password   = 'knekilwtrlbjcfkw';    
                     
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port       = 587;
 
-                    $mail->setFrom('samontetn@gmail.com', 'WorkForcePro Admin'); // Change this to your Gmail too
+                    $mail->setFrom('samontetn@gmail.com', 'WorkForcePro Admin'); 
                     $mail->addAddress($email, $first_name . ' ' . $last_name);
 
                     $mail->isHTML(true);
@@ -205,14 +209,14 @@ if (isset($_POST['register_user'])) {
                 header("Location: user_management.php");
                 exit();
                 
-            } else {
+            } catch (Exception $e) {
+                $mysql->rollback();
                 $_SESSION['status_icon'] = 'error';
                 $_SESSION['status_title'] = 'Database Error';
-                $_SESSION['status_text'] = 'Failed to register user: ' . $mysql->error;
+                $_SESSION['status_text'] = 'Failed to register user. Please check database connections. Error: ' . $e->getMessage();
             }
         }
     }
-}
 }
 
 $title = "Register User | WorkForcePro";
@@ -246,8 +250,9 @@ include('../includes/admin_header.php');
                   
                   <div class="row">
                     <div class="col-md-6 form-group">
-                        <label class="text-dark">Employee ID</label>
-                        <input type="text" name="employee_id" class="form-control shadow-sm <?php echo isset($errors['employee_id']) ? 'is-invalid' : ''; ?>" placeholder="e.g. EMP001" value="<?php echo $employee_id_val; ?>" required>
+                        <label class="text-dark">Email Address (Login ID)</label>
+                        <input type="email" name="email" class="form-control shadow-sm <?php echo isset($errors['email']) ? 'is-invalid' : ''; ?>" placeholder="name@company.com" value="<?php echo $email_val; ?>" required>
+                        <small class="text-muted">A randomly generated password will be emailed here.</small>
                     </div>
                     <div class="col-md-6 form-group">
                         <label class="text-dark">Position</label>
@@ -271,7 +276,7 @@ include('../includes/admin_header.php');
                   </div>
 
                   <div class="row">
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-4 form-group">
                         <label class="text-dark">Gender</label>
                         <select name="gender" class="form-control shadow-sm <?php echo isset($errors['required']) ? 'is-invalid' : ''; ?>" required>
                             <option value="" disabled <?php echo empty($gender_val) ? 'selected' : ''; ?>>Select Gender</option>
@@ -280,21 +285,14 @@ include('../includes/admin_header.php');
                             <option value="Other" <?php echo ($gender_val === 'Other') ? 'selected' : ''; ?>>Other</option>
                         </select>
                     </div>
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-4 form-group">
                         <label class="text-dark">Birth Date</label>
                         <input type="date" name="birth_date" class="form-control shadow-sm <?php echo isset($errors['date']) ? 'is-invalid' : ''; ?>" value="<?php echo $birth_date_val; ?>" required>
                     </div>
-                  </div>
-
-                  <div class="row">
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-4 form-group">
                         <label class="text-dark">Mobile Number</label>
-                        <input type="text" name="mobile_number" class="form-control shadow-sm <?php echo isset($errors['mobile']) ? 'is-invalid' : ''; ?>" placeholder="+639123456789" value="<?php echo $mobile_number_val; ?>" required>
-                        <small class="text-muted">Must start with +639</small>
-                    </div>
-                    <div class="col-md-6 form-group">
-                        <label class="text-dark">Join Date</label>
-                        <input type="date" name="join_date" class="form-control shadow-sm <?php echo isset($errors['date']) ? 'is-invalid' : ''; ?>" value="<?php echo $join_date_val; ?>" required>
+                        <input type="text" name="mobile_number" class="form-control shadow-sm <?php echo isset($errors['mobile']) ? 'is-invalid' : ''; ?>" placeholder="09123456789" value="<?php echo $mobile_number_val; ?>" required maxlength="13">
+                        <small class="text-muted">Type 09... or +639...</small>
                     </div>
                   </div>
 
@@ -305,29 +303,23 @@ include('../includes/admin_header.php');
                     </div>
                   </div>
 
+                  <hr class="mt-4 mb-4 border-secondary" style="opacity: 0.2;">
+
                   <div class="row">
+                    <div class="col-md-6 form-group">
+                        <label class="text-dark">Assign System Role</label>
+                        <select name="role" class="form-control shadow-sm <?php echo isset($errors['required']) ? 'is-invalid' : ''; ?>" required>
+                            <option value="" disabled <?php echo empty($role_val) ? 'selected' : ''; ?>>Select a role...</option>
+                            <option value="Employee" <?php echo ($role_val === 'Employee') ? 'selected' : ''; ?>>Employee (Standard Access)</option>
+                            <option value="HR Staff" <?php echo ($role_val === 'HR Staff') ? 'selected' : ''; ?>>HR Staff (Leave/Payroll Access)</option>
+                            <option value="Admin" <?php echo ($role_val === 'Admin') ? 'selected' : ''; ?>>System Admin (Full Access)</option>
+                        </select>
+                    </div>
                     <div class="col-md-6 form-group">
                         <label class="text-dark">Profile Image</label>
                         <input type="file" name="profile_image" class="form-control shadow-sm" accept="image/*">
                         <small class="text-muted">Optional - Upload profile picture</small>
                     </div>
-                    <div class="col-md-6 form-group">
-                        <label class="text-dark">Email Address (Login ID)</label>
-                        <input type="email" name="email" class="form-control shadow-sm <?php echo isset($errors['email']) ? 'is-invalid' : ''; ?>" placeholder="name@company.com" value="<?php echo $email_val; ?>" required>
-                        <small class="text-muted">A randomly generated password will be emailed to this address.</small>
-                    </div>
-                  </div>
-
-                  <hr class="mt-4 mb-4 border-secondary" style="opacity: 0.2;">
-
-                  <div class="form-group w-50">
-                    <label class="text-dark">Assign System Role</label>
-                    <select name="role" class="form-control shadow-sm" required>
-                        <option value="" disabled <?php echo empty($role_val) ? 'selected' : ''; ?>>Select a role...</option>
-                        <option value="Employee" <?php echo ($role_val === 'Employee') ? 'selected' : ''; ?>>Employee (Standard Access)</option>
-                        <option value="HR Staff" <?php echo ($role_val === 'HR Staff') ? 'selected' : ''; ?>>HR Staff (Leave/Payroll Access)</option>
-                        <option value="Admin" <?php echo ($role_val === 'Admin') ? 'selected' : ''; ?>>System Admin (Full Access)</option>
-                    </select>
                   </div>
                   
                 </div>

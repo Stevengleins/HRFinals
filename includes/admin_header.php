@@ -123,6 +123,12 @@ if (isset($_SESSION['user_id'])) {
               <p>Attendance</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="../Admin/leave_management.php" class="nav-link">
+              <i class="nav-icon fas fa-calendar-alt"></i>
+              <p>Leave Requests</p>
+            </a>
+          </li>
          <li class="nav-item">
             <a href="../Admin/payroll_admin.php" class="nav-link">
               <i class="nav-icon fas fa-wallet"></i>

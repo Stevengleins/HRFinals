@@ -11,6 +11,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Employee') {
 require '../database.php'; 
 
 // 3. Include the Header 
+$title = "Employee Dashboard | WorkForcePro";
 require '../includes/employee_header.php'; 
 
 // 4. Fetch User Data
@@ -18,13 +19,39 @@ $user_id = $_SESSION['user_id'];
 $query = "SELECT * FROM user WHERE user_id = '$user_id'";
 $result = $mysql->query($query);
 $employee = $result->fetch_assoc();
+
+// 5. CONNECTION: Fetch Leave Stats
+$vacationQuery = $mysql->query("SELECT COUNT(*) as total FROM leave_requests WHERE user_id = '$user_id' AND leave_type = 'Vacation Leave'");
+$vacationCount = $vacationQuery->fetch_assoc()['total'] ?? 0;
+
+$sickQuery = $mysql->query("SELECT COUNT(*) as total FROM leave_requests WHERE user_id = '$user_id' AND leave_type = 'Sick Leave'");
+$sickCount = $sickQuery->fetch_assoc()['total'] ?? 0;
+
+$pendingQuery = $mysql->query("SELECT COUNT(*) as total FROM leave_requests WHERE user_id = '$user_id' AND status = 'Pending'");
+$pendingTasks = $pendingQuery->fetch_assoc()['total'] ?? 0;
+
+// 6. CONNECTION: Check Today's Attendance Status
+date_default_timezone_set('Asia/Manila');
+$today = date('Y-m-d');
+$checkAttendance = $mysql->query("SELECT * FROM attendance WHERE user_id = '$user_id' AND date = '$today'");
+$attendance = $checkAttendance->fetch_assoc();
+$hasClockedIn = !empty($attendance['time_in']);
+$hasClockedOut = !empty($attendance['time_out']);
 ?>
 
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
+    <div class="row mb-2 align-items-end">
       <div class="col-sm-6">
-        <h1 class="m-0" style="color: #333; font-weight: 600;">Welcome back, <?php echo htmlspecialchars($employee['first_name']); ?>!</h1>
+        <h1 class="m-0 text-dark font-weight-bold">Dashboard</h1>
+        <p class="text-muted mb-0">Welcome back, <?php echo htmlspecialchars($employee['first_name']); ?>!</p>
+      </div>
+      <div class="col-sm-6 text-right d-none d-sm-block">
+        <div class="d-inline-block bg-white border px-3 py-2 shadow-sm" style="border-radius: 8px;">
+            <i class="far fa-clock mr-2 text-dark"></i>
+            <span class="font-weight-bold" id="header-clock"><?php echo date('h:i A'); ?></span>
+            <span class="text-muted ml-2 small uppercase font-weight-bold">| <?php echo date('M d, Y'); ?></span>
+        </div>
       </div>
     </div>
   </div>
@@ -34,96 +61,96 @@ $employee = $result->fetch_assoc();
   <div class="container-fluid">
     
     <div class="row">
-      <div class="col-lg-4 col-6">
-        <div class="small-box bg-primary shadow-sm" style="border-radius: 8px;">
-          <div class="inner">
-            <h3>3</h3>
-            <p>Pending Tasks</p>
+      <div class="col-12 col-sm-6 col-md-4">
+        <div class="info-box shadow-sm" style="border-radius: 8px;">
+          <span class="info-box-icon bg-primary elevation-1"><i class="fas fa-hourglass-half"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text font-weight-bold">Pending Requests</span>
+            <span class="info-box-number text-lg"><?php echo $pendingTasks; ?></span>
           </div>
-          <div class="icon"><i class="fas fa-clipboard-list"></i></div>
         </div>
       </div>
-      <div class="col-lg-4 col-6">
-        <div class="small-box bg-teal shadow-sm" style="border-radius: 8px;">
-          <div class="inner">
-            <h3>12</h3>
-            <p>Vacation Leaves</p>
+      <div class="col-12 col-sm-6 col-md-4">
+        <div class="info-box shadow-sm" style="border-radius: 8px;">
+          <span class="info-box-icon bg-teal elevation-1 text-white"><i class="fas fa-plane"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text font-weight-bold">Vacation Leaves</span>
+            <span class="info-box-number text-lg"><?php echo $vacationCount; ?></span>
           </div>
-          <div class="icon"><i class="fas fa-plane"></i></div>
         </div>
       </div>
-      <div class="col-lg-4 col-12">
-        <div class="small-box bg-maroon shadow-sm" style="border-radius: 8px;">
-          <div class="inner">
-            <h3>5</h3>
-            <p>Sick Leaves</p>
+      <div class="col-12 col-sm-6 col-md-4">
+        <div class="info-box shadow-sm" style="border-radius: 8px;">
+          <span class="info-box-icon bg-maroon elevation-1"><i class="fas fa-briefcase-medical"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text font-weight-bold">Sick Leaves</span>
+            <span class="info-box-number text-lg"><?php echo $sickCount; ?></span>
           </div>
-          <div class="icon"><i class="fas fa-briefcase-medical"></i></div>
         </div>
       </div>
     </div>
 
-    <div class="row">
+    <div class="row mt-3">
         <div class="col-md-5">
+            <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
+                <div class="card-header bg-dark text-white py-3">
+                    <h3 class="card-title font-weight-bold" style="font-size: 1.1rem;">
+                        <i class="fas fa-fingerprint mr-2"></i> Attendance Control
+                    </h3>
+                </div>
+                <div class="card-body text-center py-5">
+                    <button class="btn btn-success btn-lg btn-block mb-3 shadow-sm font-weight-bold py-3" 
+                            style="border-radius: 10px; letter-spacing: 1px;" 
+                            onclick="timePunch('Time In')" <?php echo $hasClockedIn ? 'disabled' : ''; ?>>
+                        <i class="fas fa-sign-in-alt mr-2"></i> <?php echo $hasClockedIn ? 'ALREADY CLOCKED IN' : 'CLOCK IN'; ?>
+                    </button>
+                    
+                    <button class="btn btn-danger btn-lg btn-block shadow-sm font-weight-bold py-3" 
+                            style="border-radius: 10px; letter-spacing: 1px;" 
+                            onclick="timePunch('Time Out')" <?php echo ($hasClockedOut || !$hasClockedIn) ? 'disabled' : ''; ?>>
+                        <i class="fas fa-sign-out-alt mr-2"></i> <?php echo $hasClockedOut ? 'ALREADY CLOCKED OUT' : 'CLOCK OUT'; ?>
+                    </button>
+
+                    <?php if($hasClockedIn): ?>
+                        <div class="mt-4 p-2 bg-light rounded border">
+                            <span class="text-muted small uppercase font-weight-bold">Shift Start:</span><br>
+                            <span class="h5 font-weight-bold text-dark"><?php echo date('h:i A', strtotime($attendance['time_in'])); ?></span>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
             
-            <div class="card card-widget widget-user-2 shadow-sm mb-4" style="border-radius: 8px; overflow: hidden;">
-              <div class="widget-user-header bg-navy">
-                <div class="widget-user-image">
-                  <img class="img-circle elevation-2 bg-white" src="https://ui-avatars.com/api/?name=<?php echo urlencode($employee['first_name'] . ' ' . $employee['last_name']); ?>&background=random" alt="User Avatar">
-                </div>
-                <h3 class="widget-user-username font-weight-bold"><?php echo htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']); ?></h3>
-                <h5 class="widget-user-desc" style="opacity: 0.8;"><?php echo htmlspecialchars($employee['role']); ?></h5>
-              </div>
-              <div class="card-footer p-0">
-                <ul class="nav flex-column">
-                  <li class="nav-item">
-                    <a href="#" class="nav-link text-dark">
-                      <i class="fas fa-envelope mr-2 text-muted"></i> Email 
-                      <span class="float-right badge bg-primary"><?php echo htmlspecialchars($employee['email']); ?></span>
+            <div class="card shadow-sm border-0 mt-3" style="border-radius: 8px;">
+                <div class="card-body p-3">
+                    <a href="../Employee/leave_requests.php" class="btn btn-outline-dark btn-block font-weight-bold" style="border-radius: 6px;">
+                        <i class="fas fa-calendar-plus mr-2"></i> File New Leave Request
                     </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div class="card card-outline card-primary shadow-sm" style="border-radius: 8px;">
-                <div class="card-header border-bottom-0">
-                    <h3 class="card-title font-weight-bold"><i class="fas fa-fingerprint mr-2 text-primary"></i> Daily Time Record</h3>
-                </div>
-                <div class="card-body text-center py-4">
-                    <button class="btn btn-success btn-lg btn-block mb-3 shadow-sm font-weight-bold" style="border-radius: 6px; letter-spacing: 1px;" onclick="timePunch('Time In')">
-                        <i class="fas fa-sign-in-alt mr-2"></i> CLOCK IN
-                    </button>
-                    <button class="btn btn-danger btn-lg btn-block shadow-sm font-weight-bold" style="border-radius: 6px; letter-spacing: 1px;" onclick="timePunch('Time Out')">
-                        <i class="fas fa-sign-out-alt mr-2"></i> CLOCK OUT
-                    </button>
                 </div>
             </div>
-
         </div>
 
         <div class="col-md-7">
             <style>
-                .calendar-container th { font-size: 0.9rem; color: #6c757d; font-weight: 600; padding-bottom: 10px; }
-                .calendar-container td { width: 14.28%; padding: 18px 5px; cursor: pointer; border-radius: 6px; transition: 0.2s; font-size: 1.1rem; } 
-                .calendar-container td:hover { background-color: #f4f5f7; }
-                .calendar-container td.current-day { background-color: #001f3f; color: white; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); } /* Uses Navy for current day */
+                .calendar-container th { font-size: 0.85rem; color: #6c757d; font-weight: 700; text-transform: uppercase; }
+                .calendar-container td { width: 14.28%; padding: 15px 5px; cursor: default; border-radius: 8px; transition: 0.2s; font-size: 1.1rem; } 
+                .calendar-container td.current-day { background-color: #001f3f; color: white; font-weight: bold; }
+                .calendar-container td:not(.current-day):hover { background-color: #f8f9fa; }
             </style>
 
-            <div class="card shadow-sm h-100" style="border-radius: 8px; overflow: hidden;">
-              <div class="card-header bg-navy text-white text-center py-4 border-bottom-0">
-                <h3 class="card-title w-100 mb-1" style="font-size: 2.2rem; font-weight: 700; letter-spacing: 1px;" id="liveClock">00:00:00</h3>
-                <p class="mb-0" id="liveDate" style="font-size: 1.1rem; opacity: 0.85;">Loading date...</p>
-              </div>
-              <div class="card-body p-3 d-flex flex-column justify-content-center">
-                <div class="calendar-container">
-                    <div class="d-flex justify-content-between align-items-center mb-4 px-2">
-                        <button class="btn btn-sm btn-light border shadow-sm" style="border-radius: 6px;" id="prevMonth"><i class="fas fa-chevron-left"></i></button>
-                        <strong id="monthYear" style="font-size: 1.25rem; color: #333;">Month Year</strong>
-                        <button class="btn btn-sm btn-light border shadow-sm" style="border-radius: 6px;" id="nextMonth"><i class="fas fa-chevron-right"></i></button>
+            <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
+              <div class="card-header bg-white border-bottom py-3">
+                 <div class="d-flex justify-content-between align-items-center px-2">
+                    <h3 class="card-title font-weight-bold text-dark m-0" id="monthYear">Month Year</h3>
+                    <div>
+                        <button class="btn btn-xs btn-light border mr-1" id="prevMonth"><i class="fas fa-chevron-left"></i></button>
+                        <button class="btn btn-xs btn-light border" id="nextMonth"><i class="fas fa-chevron-right"></i></button>
                     </div>
+                </div>
+              </div>
+              <div class="card-body p-3">
+                <div class="calendar-container">
                     <table class="table table-sm table-borderless text-center mb-0 w-100">
-                        <thead><tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr></thead>
+                        <thead><tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr></thead>
                         <tbody id="calendarBody"></tbody>
                     </table>
                 </div>
@@ -134,19 +161,21 @@ $employee = $result->fetch_assoc();
   </div>
 </section>
 
-</div> 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
-
 <script>
-  // SweetAlert Time Punch Logic
+  // Sync header clock
+  function updateHeaderClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      document.getElementById('header-clock').innerText = timeStr;
+  }
+  setInterval(updateHeaderClock, 1000);
+
   function timePunch(action) {
       let color = action === 'Time In' ? '#28a745' : '#dc3545';
       
       Swal.fire({
           title: `Confirm ${action}`,
-          text: `Log your ${action.toLowerCase()} for today?`,
+          text: `Are you sure you want to log your ${action.toLowerCase()}?`,
           icon: 'question',
           showCancelButton: true,
           confirmButtonColor: color,
@@ -154,7 +183,6 @@ $employee = $result->fetch_assoc();
           confirmButtonText: `Yes, ${action}!`
       }).then((result) => {
           if (result.isConfirmed) {
-              
               let formData = new FormData();
               formData.append('action', action);
 
@@ -165,25 +193,24 @@ $employee = $result->fetch_assoc();
               .then(response => response.json())
               .then(data => {
                   if (data.status === 'success') {
-                      Swal.fire('Recorded!', data.message, 'success');
+                      Swal.fire({
+                          icon: 'success',
+                          title: 'Success!',
+                          text: data.message,
+                          confirmButtonColor: '#212529'
+                      }).then(() => { location.reload(); });
                   } else {
-                      Swal.fire('Oops!', data.message, 'warning');
+                      Swal.fire('Warning', data.message, 'warning');
                   }
               })
-              .catch(error => {
-                  Swal.fire('Error', 'Could not connect to the server.', 'error');
+              .catch(() => {
+                  Swal.fire('Error', 'Connection failed.', 'error');
               });
           }
       });
   }
 
-  function updateClock() {
-      const now = new Date();
-      document.getElementById('liveClock').innerText = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-      document.getElementById('liveDate').innerText = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  }
-  setInterval(updateClock, 1000); updateClock();
-
+  // Calendar Engine
   let cMonth = new Date().getMonth(), cYear = new Date().getFullYear();
   function renderCal(m, y) {
       const first = new Date(y, m).getDay(), days = 32 - new Date(y, m, 32).getDate();
@@ -194,8 +221,8 @@ $employee = $result->fetch_assoc();
           let row = document.createElement("tr");
           for (let j = 0; j < 7; j++) {
               let cell = document.createElement("td");
-              if (i === 0 && j < first) { /* empty */ } 
-              else if (d > days) break;
+              if (i === 0 && j < first) { cell.innerText = ""; } 
+              else if (d > days) { cell.innerText = ""; }
               else {
                   cell.innerText = d;
                   let t = new Date();
@@ -207,9 +234,9 @@ $employee = $result->fetch_assoc();
           tbl.appendChild(row);
       }
   }
-  document.getElementById("prevMonth").addEventListener("click", () => { cYear = cMonth===0?cYear-1:cYear; cMonth = cMonth===0?11:cMonth-1; renderCal(cMonth, cYear); });
-  document.getElementById("nextMonth").addEventListener("click", () => { cYear = cMonth===11?cYear+1:cYear; cMonth = (cMonth+1)%12; renderCal(cMonth, cYear); });
+  document.getElementById("prevMonth").onclick = () => { cYear = cMonth===0?cYear-1:cYear; cMonth = cMonth===0?11:cMonth-1; renderCal(cMonth, cYear); };
+  document.getElementById("nextMonth").onclick = () => { cYear = cMonth===11?cYear+1:cYear; cMonth = (cMonth+1)%12; renderCal(cMonth, cYear); };
   renderCal(cMonth, cYear);
 </script>
-</body>
-</html> 
+
+<?php include '../includes/footer.php'; ?>

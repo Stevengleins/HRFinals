@@ -10,13 +10,25 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'HR Staff') {
 $user_id = $_SESSION['user_id'];
 $password_error = ''; 
 
-// Fetch current HR staff details
-$stmt = $mysql->prepare("SELECT first_name, last_name, email, role FROM user WHERE user_id = ?");
+// Fetch from BOTH tables using a LEFT JOIN
+$stmt = $mysql->prepare("
+    SELECT 
+        u.first_name as u_first, u.last_name as u_last, u.email as u_email, u.role as u_role, u.password as u_password,
+        e.* FROM user u 
+    LEFT JOIN employee_details e ON u.user_id = e.user_id 
+    WHERE u.user_id = ?
+");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $hrProfile = $result->fetch_assoc();
 $stmt->close();
+
+// Smart Fallbacks
+$display_first = !empty($hrProfile['first_name']) ? $hrProfile['first_name'] : $hrProfile['u_first'];
+$display_last  = !empty($hrProfile['last_name']) ? $hrProfile['last_name'] : $hrProfile['u_last'];
+$display_email = !empty($hrProfile['email']) ? $hrProfile['email'] : $hrProfile['u_email'];
+$display_role  = !empty($hrProfile['role']) ? $hrProfile['role'] : $hrProfile['u_role'];
 
 if (isset($_POST['update_profile'])) {
     $email = trim($_POST['email']);
@@ -39,6 +51,9 @@ if (isset($_POST['update_profile'])) {
         } else {
             $checkStmt->close();
 
+            $password_updating = false;
+            $hashed_password = $hrProfile['u_password'];
+
             if (!empty($new_password)) {
                 if (strlen($new_password) < 8 || !preg_match("/[0-9]/", $new_password) || !preg_match("/[!@#$%^&*(),.?\":{}|<>]/", $new_password)) {
                     $password_error = 'Password must be at least 8 characters and include a number and a special character.';
@@ -46,27 +61,38 @@ if (isset($_POST['update_profile'])) {
                     $password_error = 'Passwords do not match. Please try again.';
                 } else {
                     $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                    $updateStmt = $mysql->prepare("UPDATE user SET email = ?, password = ? WHERE user_id = ?");
-                    $updateStmt->bind_param("ssi", $email, $hashed_password, $user_id);
-                    
-                    if ($updateStmt->execute()) {
-                        $_SESSION['status_icon'] = 'success';
-                        $_SESSION['status_title'] = 'Settings Updated!';
-                        $_SESSION['status_text'] = 'Your email and password have been updated successfully.';
-                        header("Location: hr_profile.php");
-                        exit();
-                    }
+                    $password_updating = true;
                 }
-            } else {
-                $updateStmt = $mysql->prepare("UPDATE user SET email = ? WHERE user_id = ?");
-                $updateStmt->bind_param("si", $email, $user_id);
-                
-                if ($updateStmt->execute()) {
+            }
+
+            if (empty($password_error)) {
+                // BEGIN TRANSACTION to update both tables
+                $mysql->begin_transaction();
+
+                try {
+                    // Update user table
+                    $updateUser = $mysql->prepare("UPDATE user SET email = ?, password = ? WHERE user_id = ?");
+                    $updateUser->bind_param("ssi", $email, $hashed_password, $user_id);
+                    $updateUser->execute();
+
+                    // Update employee_details table
+                    $updateEmp = $mysql->prepare("UPDATE employee_details SET email = ? WHERE user_id = ?");
+                    $updateEmp->bind_param("si", $email, $user_id);
+                    $updateEmp->execute();
+
+                    $mysql->commit();
+
                     $_SESSION['status_icon'] = 'success';
                     $_SESSION['status_title'] = 'Settings Updated!';
-                    $_SESSION['status_text'] = 'Your email address has been updated successfully.';
+                    $_SESSION['status_text'] = $password_updating ? 'Your email and password have been updated successfully.' : 'Your email address has been updated successfully.';
                     header("Location: hr_profile.php");
                     exit();
+
+                } catch (Exception $e) {
+                    $mysql->rollback();
+                    $_SESSION['status_icon'] = 'error';
+                    $_SESSION['status_title'] = 'Update Failed';
+                    $_SESSION['status_text'] = 'A database error occurred: ' . $e->getMessage();
                 }
             }
         }
@@ -103,28 +129,28 @@ include('../includes/hr_header.php');
                 <div class="card-body bg-light">
 
                   <div class="alert alert-secondary shadow-sm mb-4" style="border-left: 4px solid #6c757d;">
-                      <i class="fas fa-info-circle mr-2"></i> <strong>Note:</strong> Your name and system role are locked. If you need to legally change your name on file, please contact your System Administrator.
+                      <i class="fas fa-info-circle mr-2"></i> <strong>Note:</strong> Your name and system role are locked. If you need to legally change your name or details on file, please contact your System Administrator.
                   </div>
 
                   <div class="row">
                     <div class="col-md-6 form-group">
                         <label class="text-dark">First Name</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($hrProfile['first_name']); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_first); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                     <div class="col-md-6 form-group">
                         <label class="text-dark">Last Name</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($hrProfile['last_name']); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_last); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                   </div>
 
                   <div class="row mt-2">
                     <div class="col-md-6 form-group">
                         <label class="text-dark">Email Address (Login ID)</label>
-                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars(isset($_POST['email']) ? $_POST['email'] : $hrProfile['email']); ?>" required>
+                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars(isset($_POST['email']) ? $_POST['email'] : $display_email); ?>" required>
                     </div>
                     <div class="col-md-6 form-group">
                         <label class="text-dark">System Role</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($hrProfile['role']); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_role); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                   </div>
 

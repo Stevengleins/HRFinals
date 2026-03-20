@@ -1,27 +1,49 @@
 <?php
 session_start();
+require_once('../database.php');
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
     header("Location: ../index.php");
     exit();
 }
 
-require '../database.php';
-include '../includes/admin_header.php'; 
-
-// names ng employee
-$query = "SELECT lr.*, u.first_name, u.last_name 
-          FROM leave_requests lr 
-          JOIN user u ON lr.user_id = u.user_id 
-          ORDER BY lr.date_applied DESC";
+// Fetch all leave requests grouped by status
+$query = "
+    SELECT lr.*, u.first_name, u.last_name 
+    FROM leave_requests lr
+    JOIN user u ON lr.user_id = u.user_id
+    ORDER BY lr.date_applied DESC
+";
 $result = $mysql->query($query);
+
+$leaves = ['Pending' => [], 'Approved' => [], 'Rejected' => []];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        // Fallback in case a status is empty or unusual
+        $status = $row['status'] ?? 'Pending';
+        if (isset($leaves[$status])) {
+            $leaves[$status][] = $row;
+        }
+    }
+}
+
+$title = "Leave Management | WorkForcePro";
+include('../includes/admin_header.php');
 ?>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
+    <div class="row mb-2 align-items-center">
       <div class="col-sm-6">
-        <h1 class="m-0">Leave Management</h1>
+        <h1 class="m-0 text-dark font-weight-bold">Leave Management Directory</h1>
+      </div>
+      <div class="col-sm-6 text-right">
+        <a href="export_leaves.php" class="btn btn-success shadow-sm">
+          <i class="fas fa-file-excel mr-1"></i> Export All Leaves
+        </a>
       </div>
     </div>
   </div>
@@ -29,109 +51,138 @@ $result = $mysql->query($query);
 
 <section class="content">
   <div class="container-fluid">
-    <div class="card shadow-sm">
-      <div class="card-header bg-dark text-white">
-        <h3 class="card-title"><i class="fas fa-calendar-check mr-2"></i> Employee Leave Requests</h3>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover table-striped m-0 text-center align-middle">
-            <thead class="bg-light">
-              <tr>
-                <th>Employee Name</th>
-                <th>Leave Type</th>
-                <th>Dates</th>
-                <th>Reason</th>
-                <th>Date Applied</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php if($result && $result->num_rows > 0): while($row = $result->fetch_assoc()): ?>
-              <tr>
-                <td class="font-weight-bold"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                <td><?php echo htmlspecialchars($row['leave_type']); ?></td>
-                <td>
-                    <?php echo date('M d, Y', strtotime($row['start_date'])); ?> - <br>
-                    <?php echo date('M d, Y', strtotime($row['end_date'])); ?>
-                </td>
-                <td style="max-width: 200px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="<?php echo htmlspecialchars($row['reason']); ?>">
-                    <?php echo htmlspecialchars($row['reason']); ?>
-                </td>
-                <td><?php echo date('M d, Y g:i A', strtotime($row['date_applied'])); ?></td>
-                <td>
-                    <?php 
-                        if($row['status'] == 'Approved') echo '<span class="badge badge-success px-2 py-1">Approved</span>';
-                        elseif($row['status'] == 'Rejected') echo '<span class="badge badge-danger px-2 py-1">Rejected</span>';
-                        else echo '<span class="badge badge-warning px-2 py-1">Pending</span>';
-                    ?>
-                </td>
-                <td>
-                    <?php if($row['status'] == 'Pending'): ?>
-                        <button onclick="updateLeaveStatus(<?php echo $row['leave_id']; ?>, 'Approved')" class="btn btn-sm btn-success shadow-sm mr-1" title="Approve"><i class="fas fa-check"></i></button>
-                        <button onclick="updateLeaveStatus(<?php echo $row['leave_id']; ?>, 'Rejected')" class="btn btn-sm btn-danger shadow-sm" title="Reject"><i class="fas fa-times"></i></button>
-                    <?php else: ?>
-                        <span class="text-muted text-sm">Actioned</span>
-                    <?php endif; ?>
-                </td>
-              </tr>
-              <?php endwhile; else: ?>
-              <tr>
-                  <td colspan="7" class="text-center py-4">No leave requests found.</td>
-              </tr>
-              <?php endif; ?>
-            </tbody>
-          </table>
+    
+    <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
+        <div class="card-header bg-dark text-white p-0 border-bottom-0">
+            <ul class="nav nav-tabs" id="leaveTabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active font-weight-bold text-dark bg-white" id="pending-tab" data-toggle="tab" href="#pending" role="tab">
+                        <i class="fas fa-clock mr-1 text-warning"></i> Pending <span class="badge badge-warning ml-1"><?php echo count($leaves['Pending']); ?></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link font-weight-bold text-white" id="approved-tab" data-toggle="tab" href="#approved" role="tab">
+                        <i class="fas fa-check-circle mr-1 text-success"></i> Approved <span class="badge badge-success ml-1"><?php echo count($leaves['Approved']); ?></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link font-weight-bold text-white" id="rejected-tab" data-toggle="tab" href="#rejected" role="tab">
+                        <i class="fas fa-times-circle mr-1 text-danger"></i> Rejected <span class="badge badge-danger ml-1"><?php echo count($leaves['Rejected']); ?></span>
+                    </a>
+                </li>
+            </ul>
         </div>
-      </div>
+        
+        <div class="card-body bg-light">
+            <div class="tab-content" id="leaveTabsContent">
+                
+                <div class="tab-pane fade show active" id="pending" role="tabpanel">
+                    <table class="table table-bordered table-hover bg-white text-center align-middle datatable w-100">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Employee</th>
+                                <th>Leave Type</th>
+                                <th>Duration</th>
+                                <th>Reason</th>
+                                <th>Date Filed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($leaves['Pending'] as $row): ?>
+                            <tr>
+                                <td class="font-weight-bold text-left"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
+                                <td><span class="badge badge-info px-2 py-1"><?php echo htmlspecialchars($row['leave_type']); ?></span></td>
+                                <td>
+                                    <?php echo date('M d', strtotime($row['start_date'])); ?> - <?php echo date('M d, Y', strtotime($row['end_date'])); ?>
+                                </td>
+                                <td><?php echo htmlspecialchars($row['reason']); ?></td>
+                                <td class="text-muted"><?php echo date('M d, Y', strtotime($row['date_applied'])); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="tab-pane fade" id="approved" role="tabpanel">
+                    <table class="table table-bordered table-hover bg-white text-center align-middle datatable w-100">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Employee</th>
+                                <th>Leave Type</th>
+                                <th>Duration</th>
+                                <th>HR Remarks</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($leaves['Approved'] as $row): ?>
+                            <tr>
+                                <td class="font-weight-bold text-left"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['leave_type']); ?></td>
+                                <td><?php echo date('M d', strtotime($row['start_date'])); ?> - <?php echo date('M d, Y', strtotime($row['end_date'])); ?></td>
+                                <td class="text-muted font-italic"><?php echo htmlspecialchars($row['remarks'] ?? 'No remarks provided.'); ?></td>
+                                <td><span class="badge badge-success px-2 py-1">Approved</span></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="tab-pane fade" id="rejected" role="tabpanel">
+                    <table class="table table-bordered table-hover bg-white text-center align-middle datatable w-100">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Employee</th>
+                                <th>Leave Type</th>
+                                <th>Duration</th>
+                                <th>Reason for Rejection</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($leaves['Rejected'] as $row): ?>
+                            <tr>
+                                <td class="font-weight-bold text-left"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['leave_type']); ?></td>
+                                <td><?php echo date('M d', strtotime($row['start_date'])); ?> - <?php echo date('M d, Y', strtotime($row['end_date'])); ?></td>
+                                <td class="text-danger font-weight-bold font-italic"><?php echo htmlspecialchars($row['remarks'] ?? 'No reason provided.'); ?></td>
+                                <td><span class="badge badge-danger px-2 py-1">Rejected</span></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
     </div>
+
   </div>
 </section>
 
-<?php include '../includes/footer.php'; ?>
+<?php include('../includes/footer.php'); ?>
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
+
 <script>
-function updateLeaveStatus(leaveId, newStatus) {
-    let actionColor = newStatus === 'Approved' ? '#28a745' : '#dc3545';
-    let actionText = newStatus === 'Approved' ? 'Approve' : 'Reject';
+  $(document).ready(function () {
+      // Initialize DataTables
+      $('.datatable').DataTable({
+          "responsive": true, 
+          "lengthChange": true, 
+          "autoWidth": false,
+          "searching": true,
+          "ordering": true,
+          "order": [[ 4, "desc" ]] // Sort by date column by default
+      });
 
-    Swal.fire({
-        title: `Are you sure?`,
-        text: `You are about to ${actionText.toLowerCase()} this leave request.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: actionColor,
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: `Yes, ${actionText} it!`
-    }).then((result) => {
-        if (result.isConfirmed) {
-            window.location.href = `process_leave.php?id=${leaveId}&status=${newStatus}`;
-        }
-    });
-}
+      // Custom Tab Styling Logic
+      $('.nav-tabs a').on('shown.bs.tab', function (e) {
+          $('.nav-tabs a').removeClass('text-dark bg-white').addClass('text-white');
+          $(e.target).removeClass('text-white').addClass('text-dark bg-white');
+      });
+  });
 </script>
-
-<?php
-if (isset($_SESSION['status_icon']) && isset($_SESSION['status_title']) && isset($_SESSION['status_text'])) {
-    $icon = $_SESSION['status_icon'];
-    $title = $_SESSION['status_title'];
-    $text = $_SESSION['status_text'];
-    
-    echo "
-    <script>
-        Swal.fire({
-            icon: '$icon',
-            title: '$title',
-            text: '$text',
-            confirmButtonColor: '#3085d6'
-        });
-    </script>
-    ";
-
-    unset($_SESSION['status_icon']);
-    unset($_SESSION['status_title']);
-    unset($_SESSION['status_text']);
-}
-?>

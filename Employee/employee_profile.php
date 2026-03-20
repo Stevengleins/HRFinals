@@ -9,13 +9,25 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Employee') {
 
 $user_id = $_SESSION['user_id'];
 
-// Fetch current employee details
-$stmt = $mysql->prepare("SELECT first_name, last_name, email, role FROM user WHERE user_id = ?");
+// Fetch from BOTH tables using a LEFT JOIN
+$stmt = $mysql->prepare("
+    SELECT 
+        u.first_name as u_first, u.last_name as u_last, u.email as u_email, u.role as u_role, 
+        e.* FROM user u 
+    LEFT JOIN employee_details e ON u.user_id = e.user_id 
+    WHERE u.user_id = ?
+");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $employeeProfile = $result->fetch_assoc();
 $stmt->close();
+
+// Smart Fallbacks (In case the Employee doesn't have an employee_details record yet)
+$display_first = !empty($employeeProfile['first_name']) ? $employeeProfile['first_name'] : $employeeProfile['u_first'];
+$display_last  = !empty($employeeProfile['last_name']) ? $employeeProfile['last_name'] : $employeeProfile['u_last'];
+$display_email = !empty($employeeProfile['email']) ? $employeeProfile['email'] : $employeeProfile['u_email'];
+$display_role  = !empty($employeeProfile['role']) ? $employeeProfile['role'] : $employeeProfile['u_role'];
 
 $title = "My Profile | WorkForcePro";
 include('../includes/employee_header.php'); 
@@ -37,37 +49,58 @@ include('../includes/employee_header.php');
         <div class="col-md-8">
             <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
               
-              <div class="card-header bg-dark text-white py-3 border-bottom-0">
+              <div class="card-header bg-dark text-white py-3 border-bottom-0 d-flex align-items-center">
                   <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;">
-                      <i class="fas fa-user mr-2"></i> Account Details
+                      <i class="fas fa-user-circle mr-2"></i> Account Details
                   </h3>
               </div>
               
               <div class="card-body bg-light">
-                <div class="row mb-3">
-                  <div class="col-md-4 text-muted font-weight-bold">First Name:</div>
-                  <div class="col-md-8 text-dark"><?php echo htmlspecialchars($employeeProfile['first_name']); ?></div>
-                </div>
-                <hr style="opacity: 0.1;">
                 
-                <div class="row mb-3">
-                  <div class="col-md-4 text-muted font-weight-bold">Last Name:</div>
-                  <div class="col-md-8 text-dark"><?php echo htmlspecialchars($employeeProfile['last_name']); ?></div>
+                <div class="text-center mb-4">
+                    <?php if(!empty($employeeProfile['profile_image'])): ?>
+                        <img src="../<?php echo htmlspecialchars($employeeProfile['profile_image']); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
+                    <?php else: ?>
+                        <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($display_first . ' ' . $display_last); ?>&background=17a2b8&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; border: 3px solid #ffffff;">
+                    <?php endif; ?>
+                    <h4 class="mt-3 font-weight-bold text-dark"><?php echo htmlspecialchars($display_first . ' ' . $display_last); ?></h4>
+                    <p class="text-muted mb-0"><?php echo htmlspecialchars($employeeProfile['position'] ?? 'Position Not Set'); ?></p>
+                    <span class="badge bg-info px-2 py-1 mt-2"><i class="fas fa-briefcase mr-1"></i> <?php echo htmlspecialchars($display_role); ?></span>
                 </div>
+
                 <hr style="opacity: 0.1;">
 
-                <div class="row mb-3">
-                  <div class="col-md-4 text-muted font-weight-bold">Email Address:</div>
-                  <div class="col-md-8 text-dark"><?php echo htmlspecialchars($employeeProfile['email']); ?></div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-envelope mr-2"></i>Email Address</span>
+                            <span class="text-dark ml-4"><?php echo htmlspecialchars($display_email); ?></span>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-phone mr-2"></i>Mobile Number</span>
+                            <span class="text-dark ml-4"><?php echo htmlspecialchars($employeeProfile['mobile_number'] ?? 'Not Provided'); ?></span>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-map-marker-alt mr-2"></i>Address</span>
+                            <span class="text-dark ml-4"><?php echo nl2br(htmlspecialchars($employeeProfile['address'] ?? 'Not Provided')); ?></span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-venus-mars mr-2"></i>Gender</span>
+                            <span class="text-dark ml-4"><?php echo htmlspecialchars($employeeProfile['gender'] ?? 'Not Provided'); ?></span>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-birthday-cake mr-2"></i>Birth Date</span>
+                            <span class="text-dark ml-4"><?php echo !empty($employeeProfile['birth_date']) ? date('F d, Y', strtotime($employeeProfile['birth_date'])) : 'Not Provided'; ?></span>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-calendar-check mr-2"></i>Join Date</span>
+                            <span class="text-dark ml-4"><?php echo !empty($employeeProfile['join_date']) ? date('F d, Y', strtotime($employeeProfile['join_date'])) : 'Not Provided'; ?></span>
+                        </div>
+                    </div>
                 </div>
-                <hr style="opacity: 0.1;">
 
-                <div class="row mb-3">
-                  <div class="col-md-4 text-muted font-weight-bold">System Role:</div>
-                  <div class="col-md-8">
-                    <span class="badge bg-info px-2 py-1"><i class="fas fa-briefcase mr-1"></i> <?php echo htmlspecialchars($employeeProfile['role']); ?></span>
-                  </div>
-                </div>
               </div>
               
               <div class="card-footer bg-white text-right border-top-0 py-3">

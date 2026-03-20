@@ -8,22 +8,45 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
 }
 
 $user_id = $_SESSION['user_id'];
-$errors = [];
 
-// Fetch current admin details to populate the form
-$stmt = $mysql->prepare("SELECT first_name, last_name, email, role FROM user WHERE user_id = ?");
+// Fetch current admin details from BOTH tables
+$stmt = $mysql->prepare("
+    SELECT 
+        u.first_name as u_first, u.last_name as u_last, u.email as u_email, u.role as u_role, u.password as u_password,
+        e.* FROM user u 
+    LEFT JOIN employee_details e ON u.user_id = e.user_id 
+    WHERE u.user_id = ?
+");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $adminProfile = $result->fetch_assoc();
 $stmt->close();
 
+// Smart Fallbacks for the HTML form
+$display_first = !empty($adminProfile['first_name']) ? $adminProfile['first_name'] : $adminProfile['u_first'];
+$display_last  = !empty($adminProfile['last_name']) ? $adminProfile['last_name'] : $adminProfile['u_last'];
+$display_email = !empty($adminProfile['email']) ? $adminProfile['email'] : $adminProfile['u_email'];
+$display_role  = !empty($adminProfile['role']) ? $adminProfile['role'] : $adminProfile['u_role'];
+
 if (isset($_POST['update_profile'])) {
     $first_name = trim($_POST['first_name']);
+    $middle_name = trim($_POST['middle_name']);
     $last_name = trim($_POST['last_name']);
     $email = trim($_POST['email']);
+    $position = trim($_POST['position']);
+    $gender = $_POST['gender'] ?? '';
+    $birth_date = $_POST['birth_date'];
+    $mobile_number = trim($_POST['mobile_number']);
+    $address = trim($_POST['address']);
+    
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
+
+    // SMART FORMATTING: Automatically convert "09..." to "+639..."
+    if (preg_match("/^09\d{9}$/", $mobile_number)) {
+        $mobile_number = '+63' . substr($mobile_number, 1);
+    }
 
     if (!preg_match("/^[a-zA-Z\s\-]+$/", $first_name) || !preg_match("/^[a-zA-Z\s\-]+$/", $last_name)) {
         $_SESSION['status_icon'] = 'error';
@@ -33,6 +56,10 @@ if (isset($_POST['update_profile'])) {
         $_SESSION['status_icon'] = 'error';
         $_SESSION['status_title'] = 'Invalid Email';
         $_SESSION['status_text'] = 'Please provide a valid email address.';
+    } elseif (!preg_match("/^\+639\d{9}$/", $mobile_number) && !empty($mobile_number)) {
+        $_SESSION['status_icon'] = 'error';
+        $_SESSION['status_title'] = 'Invalid Mobile Number';
+        $_SESSION['status_text'] = 'Please enter a valid PH mobile number (e.g., 09123456789).';
     } else {
         $checkStmt = $mysql->prepare("SELECT user_id FROM user WHERE email = ? AND user_id != ?");
         $checkStmt->bind_param("si", $email, $user_id);
@@ -42,44 +69,89 @@ if (isset($_POST['update_profile'])) {
             $_SESSION['status_icon'] = 'error';
             $_SESSION['status_title'] = 'Email Taken';
             $_SESSION['status_text'] = 'That email is already in use by another account.';
+            $checkStmt->close();
         } else {
             $checkStmt->close();
 
+            // Handle Profile Image Upload
+            $profile_image_path = $adminProfile['profile_image']; // Default to existing
+            if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
+                $upload_dir = '../uploads/profile_images/';
+                if (!is_dir($upload_dir)) { mkdir($upload_dir, 0755, true); }
+                $file_name = uniqid() . '_' . basename($_FILES['profile_image']['name']);
+                $target_file = $upload_dir . $file_name;
+                
+                if (getimagesize($_FILES['profile_image']['tmp_name']) !== false) {
+                    if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_file)) {
+                        $profile_image_path = 'uploads/profile_images/' . $file_name;
+                    }
+                }
+            }
+
+            // Determine if updating password
+            $hashed_password = $adminProfile['u_password']; 
+            $password_updating = false;
+            
             if (!empty($new_password)) {
                 if (strlen($new_password) < 8 || !preg_match("/[0-9]/", $new_password) || !preg_match("/[!@#$%^&*(),.?\":{}|<>]/", $new_password)) {
                     $_SESSION['status_icon'] = 'error';
                     $_SESSION['status_title'] = 'Weak Password';
                     $_SESSION['status_text'] = 'Password must be at least 8 characters and include a number and a special character.';
+                    header("Location: admin_edit_profile.php"); exit();
                 } elseif ($new_password !== $confirm_password) {
                     $_SESSION['status_icon'] = 'error';
                     $_SESSION['status_title'] = 'Password Mismatch';
                     $_SESSION['status_text'] = 'The new passwords do not match. Please try again.';
+                    header("Location: admin_edit_profile.php"); exit();
                 } else {
                     $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                    $updateStmt = $mysql->prepare("UPDATE user SET first_name = ?, last_name = ?, email = ?, password = ? WHERE user_id = ?");
-                    $updateStmt->bind_param("ssssi", $first_name, $last_name, $email, $hashed_password, $user_id);
-                    
-                    if ($updateStmt->execute()) {
-                        $_SESSION['first_name'] = $first_name; 
-                        $_SESSION['status_icon'] = 'success';
-                        $_SESSION['status_title'] = 'Profile Updated!';
-                        $_SESSION['status_text'] = 'Your details and password have been updated successfully.';
-                        header("Location: admin_profile.php");
-                        exit();
-                    }
+                    $password_updating = true;
                 }
-            } else {
-                $updateStmt = $mysql->prepare("UPDATE user SET first_name = ?, last_name = ?, email = ? WHERE user_id = ?");
-                $updateStmt->bind_param("sssi", $first_name, $last_name, $email, $user_id);
-                
-                if ($updateStmt->execute()) {
-                    $_SESSION['first_name'] = $first_name;
-                    $_SESSION['status_icon'] = 'success';
-                    $_SESSION['status_title'] = 'Profile Updated!';
-                    $_SESSION['status_text'] = 'Your profile details have been updated successfully.';
-                    header("Location: admin_profile.php");
-                    exit();
+            }
+
+            // ==========================================
+            // BEGIN TRANSACTION: Update TWO tables safely
+            // ==========================================
+            $mysql->begin_transaction();
+
+            try {
+                // 1. Update the Main User Table
+                $updateUser = $mysql->prepare("UPDATE user SET first_name = ?, last_name = ?, email = ?, password = ? WHERE user_id = ?");
+                $updateUser->bind_param("ssssi", $first_name, $last_name, $email, $hashed_password, $user_id);
+                $updateUser->execute();
+
+                // 2. Check if Employee Details exist for this user yet
+                $checkEmp = $mysql->prepare("SELECT id FROM employee_details WHERE user_id = ?");
+                $checkEmp->bind_param("i", $user_id);
+                $checkEmp->execute();
+                $empResult = $checkEmp->get_result();
+
+                if ($empResult->num_rows > 0) {
+                    // Update existing details (FIXED: exactly 10 's' and 1 'i')
+                    $updateEmp = $mysql->prepare("UPDATE employee_details SET first_name=?, middle_name=?, last_name=?, email=?, gender=?, birth_date=?, mobile_number=?, address=?, position=?, profile_image=? WHERE user_id=?");
+                    $updateEmp->bind_param("ssssssssssi", $first_name, $middle_name, $last_name, $email, $gender, $birth_date, $mobile_number, $address, $position, $profile_image_path, $user_id);
+                    $updateEmp->execute();
+                } else {
+                    // Insert new details (Perfect for old admin accounts)
+                    $insertEmp = $mysql->prepare("INSERT INTO employee_details (user_id, first_name, middle_name, last_name, email, gender, birth_date, mobile_number, address, position, role, profile_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $insertEmp->bind_param("isssssssssss", $user_id, $first_name, $middle_name, $last_name, $email, $gender, $birth_date, $mobile_number, $address, $position, $display_role, $profile_image_path);
+                    $insertEmp->execute();
                 }
+
+                $mysql->commit();
+
+                $_SESSION['first_name'] = $first_name; 
+                $_SESSION['status_icon'] = 'success';
+                $_SESSION['status_title'] = 'Profile Updated!';
+                $_SESSION['status_text'] = $password_updating ? 'Your details and password have been updated successfully.' : 'Your profile details have been updated successfully.';
+                header("Location: admin_profile.php");
+                exit();
+
+            } catch (Exception $e) {
+                $mysql->rollback();
+                $_SESSION['status_icon'] = 'error';
+                $_SESSION['status_title'] = 'Update Failed';
+                $_SESSION['status_text'] = 'A database error occurred: ' . $e->getMessage();
             }
         }
     }
@@ -111,28 +183,71 @@ include('../includes/admin_header.php');
                   </h3>
               </div>
               
-              <form method="POST" action="admin_edit_profile.php">
+              <form method="POST" action="admin_edit_profile.php" enctype="multipart/form-data">
                 <div class="card-body bg-light">
 
                   <div class="row">
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-4 form-group">
                         <label class="text-dark">First Name</label>
-                        <input type="text" name="first_name" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['first_name']); ?>" required>
+                        <input type="text" name="first_name" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_first); ?>" required>
                     </div>
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-4 form-group">
+                        <label class="text-dark">Middle Name</label>
+                        <input type="text" name="middle_name" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['middle_name'] ?? ''); ?>">
+                    </div>
+                    <div class="col-md-4 form-group">
                         <label class="text-dark">Last Name</label>
-                        <input type="text" name="last_name" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['last_name']); ?>" required>
+                        <input type="text" name="last_name" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_last); ?>" required>
                     </div>
                   </div>
 
-                  <div class="row mt-2">
+                  <div class="row">
                     <div class="col-md-6 form-group">
                         <label class="text-dark">Email Address (Login ID)</label>
-                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['email']); ?>" required>
+                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_email); ?>" required>
                     </div>
                     <div class="col-md-6 form-group">
+                        <label class="text-dark">Position</label>
+                        <input type="text" name="position" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['position'] ?? ''); ?>">
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-4 form-group">
+                        <label class="text-dark">Gender</label>
+                        <select name="gender" class="form-control shadow-sm">
+                            <option value="" disabled <?php echo empty($adminProfile['gender']) ? 'selected' : ''; ?>>Select Gender</option>
+                            <option value="Male" <?php echo (($adminProfile['gender'] ?? '') === 'Male') ? 'selected' : ''; ?>>Male</option>
+                            <option value="Female" <?php echo (($adminProfile['gender'] ?? '') === 'Female') ? 'selected' : ''; ?>>Female</option>
+                            <option value="Other" <?php echo (($adminProfile['gender'] ?? '') === 'Other') ? 'selected' : ''; ?>>Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label class="text-dark">Birth Date</label>
+                        <input type="date" name="birth_date" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['birth_date'] ?? ''); ?>">
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label class="text-dark">Mobile Number</label>
+                        <input type="text" name="mobile_number" class="form-control shadow-sm" placeholder="09123456789" maxlength="13" value="<?php echo htmlspecialchars($adminProfile['mobile_number'] ?? ''); ?>">
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-12 form-group">
+                        <label class="text-dark">Address</label>
+                        <textarea name="address" class="form-control shadow-sm" rows="2" placeholder="Full address"><?php echo htmlspecialchars($adminProfile['address'] ?? ''); ?></textarea>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="col-md-6 form-group">
                         <label class="text-dark">System Role</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($adminProfile['role']); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_role); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label class="text-dark">Profile Image</label>
+                        <input type="file" name="profile_image" class="form-control shadow-sm" accept="image/*">
+                        <small class="text-muted">Upload a new picture to change</small>
                     </div>
                   </div>
 
