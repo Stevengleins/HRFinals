@@ -26,7 +26,7 @@
           <div class="col-md-7 d-flex flex-column justify-content-center p-5">
             
             <div class="d-flex align-items-center mb-5">
-              <div class="mr-2" style="width: 18px; height: 18px; background: #e58f8a;"></div>
+              <img src="logo.png" alt="WORKFORCEPRO" style="max-height: 48px; width: auto; margin-right: 10px;" />
               <h4 class="m-0 font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></h4>
             </div>
 
