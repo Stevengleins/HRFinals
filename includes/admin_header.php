@@ -75,8 +75,8 @@ if (isset($_SESSION['user_id'])) {
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4">
-    <a href="dashboard.php" class="brand-link d-flex align-items-center justify-content-center border-bottom-0">
-      <div class="mr-2" style="width: 18px; height: 18px; background: #e58f8a;"></div>
+    <a href="../Admin/dashboard.php" class="brand-link d-flex align-items-center justify-content-center border-bottom-0">
+      <img src="../logo.png" alt="WORKFORCEPRO" style="max-height: 48px; width: auto; margin-right: 10px;" />
       <span class="brand-text m-0 font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
     </a>
 
