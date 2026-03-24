@@ -112,12 +112,6 @@ if (isset($_SESSION['user_id'])) {
             </a>
           </li>
           <li class="nav-item">
-            <a href="employee_task.php" class="nav-link">
-              <i class="nav-icon fas fa-tasks"></i>
-              <p>My Tasks</p>
-            </a>
-          </li>
-          <li class="nav-item">
             <a href="leave_requests.php" class="nav-link">
               <i class="nav-icon fas fa-calendar-alt"></i>
               <p>Leave Requests</p>
