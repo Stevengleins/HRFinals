@@ -64,23 +64,15 @@ if (isset($_SESSION['user_id'])) {
         <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
       </li>
     </ul>
-
-    <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <a class="nav-link text-danger font-weight-bold" href="#" onclick="confirmLogout(event)">
-            <i class="fas fa-sign-out-alt mr-1"></i> Logout
-        </a>
-      </li>
-    </ul>
   </nav>
 
-  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+  <aside class="main-sidebar sidebar-dark-primary elevation-4 d-flex flex-column">
     <a href="hr_dashboard.php" class="brand-link d-flex align-items-center justify-content-center border-bottom-0">
       <img src="../logo.png" alt="WORKFORCEPRO" style="max-height: 48px; width: auto; margin-right: 10px;" />
       <span class="brand-text m-0 font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
     </a>
 
-    <div class="sidebar">
+    <div class="sidebar flex-grow-1 d-flex flex-column">
       
       <div class="user-panel mt-2 pb-3 pt-3 mb-3 d-flex align-items-center shadow-sm" style="background-color: #454d55; border-radius: 8px; margin-left: 8px; margin-right: 8px;">
         <div class="image pr-2 pl-2">
@@ -103,7 +95,7 @@ if (isset($_SESSION['user_id'])) {
         </div>
       </div>
 
-      <nav class="mt-2">
+      <nav class="mt-2 flex-grow-1">
         <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
           <li class="nav-item">
             <a href="../HR_Staff/hr_dashboard.php" class="nav-link">
@@ -138,6 +130,17 @@ if (isset($_SESSION['user_id'])) {
         </ul>
       </nav>
       
+      <div class="mt-auto pb-3">
+        <ul class="nav nav-pills nav-sidebar flex-column">
+          <li class="nav-item">
+            <a href="#" onclick="confirmLogout(event)" class="nav-link text-danger">
+              <i class="nav-icon fas fa-sign-out-alt"></i>
+              <p>Logout</p>
+            </a>
+          </li>
+        </ul>
+      </div>
+
     </div>
   </aside>
 
