@@ -5,10 +5,11 @@ require_once(__DIR__ . '/../database.php');
 $sidebarFirstName = isset($_SESSION['first_name']) ? $_SESSION['first_name'] : 'HR Staff';
 $sidebarEmail = 'hr@workforce.com'; // Default fallback
 $sidebarRole = 'HR Staff';
+$sidebarProfileImage = null;
 
 // Fetch the current user's details from the database if they are logged in
 if (isset($_SESSION['user_id'])) {
-    $headerStmt = $mysql->prepare("SELECT email, role FROM user WHERE user_id = ?");
+    $headerStmt = $mysql->prepare("SELECT u.email, u.role, e.profile_image FROM user u LEFT JOIN employee_details e ON u.user_id = e.user_id WHERE u.user_id = ?");
     if ($headerStmt) {
         $headerStmt->bind_param("i", $_SESSION['user_id']);
         $headerStmt->execute();
@@ -17,6 +18,7 @@ if (isset($_SESSION['user_id'])) {
             $headerUser = $headerResult->fetch_assoc();
             $sidebarEmail = $headerUser['email'];
             $sidebarRole = $headerUser['role'];
+            $sidebarProfileImage = $headerUser['profile_image'];
         }
         $headerStmt->close();
     }
@@ -77,7 +79,11 @@ if (isset($_SESSION['user_id'])) {
       <div class="user-panel mt-2 pb-3 pt-3 mb-3 d-flex align-items-center shadow-sm" style="background-color: #454d55; border-radius: 8px; margin-left: 8px; margin-right: 8px;">
         <div class="image pr-2 pl-2">
             <a href="../HR_Staff/hr_profile.php">
-                <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($sidebarFirstName); ?>&background=28a745&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php if (!empty($sidebarProfileImage)): ?>
+                    <img src="../<?php echo htmlspecialchars($sidebarProfileImage); ?>" class="img-circle elevation-2" alt="User Image" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php else: ?>
+                    <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($sidebarFirstName); ?>&background=28a745&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php endif; ?>
             </a>
         </div>
         <div class="info d-flex flex-column align-items-start pl-1" style="overflow: hidden;">
