@@ -61,7 +61,6 @@ include('../includes/admin_header.php');
         <table id="archivedTable" class="table table-bordered table-hover table-striped text-center align-middle w-100 bg-white">
           <thead class="bg-dark text-white">
             <tr>
-              <th>ID</th>
               <th>Full Name</th>
               <th>Role</th>
               <th>Email</th>
@@ -71,15 +70,17 @@ include('../includes/admin_header.php');
           <tbody>
             <?php if($result && $result->num_rows > 0): while($row = $result->fetch_assoc()): ?>
             <tr>
-              <td class="text-muted"><?php echo $row['user_id']; ?></td>
               <td class="text-left font-weight-bold text-secondary"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
               <td>
                   <span class="badge bg-secondary px-2 py-1"><?php echo htmlspecialchars($row['role']); ?></span>
               </td>
               <td class="text-left text-muted"><?php echo htmlspecialchars($row['email']); ?></td>
               <td>
-                <button type="button" class="btn btn-sm btn-success shadow-sm" onclick="confirmRestore(<?php echo $row['user_id']; ?>)" title="Restore User">
+                <button type="button" class="btn btn-sm btn-success shadow-sm mr-1" onclick="confirmRestore(<?php echo $row['user_id']; ?>)" title="Restore User">
                   <i class="fas fa-trash-restore mr-1"></i> Restore
+                </button>
+                <button type="button" class="btn btn-sm btn-danger shadow-sm" onclick="confirmDelete(<?php echo $row['user_id']; ?>)" title="Permanently Delete User">
+                  <i class="fas fa-trash-alt mr-1"></i> Delete
                 </button>
               </td>
             </tr>
@@ -109,7 +110,7 @@ include('../includes/admin_header.php');
       "ordering": true,     
       "info": true,         
       "paging": true,
-      "order": [[ 1, "asc" ]] 
+      "order": [[ 0, "asc" ]] // Updated to 0 to sort alphabetically by name by default
     });
   });
 
@@ -126,6 +127,24 @@ include('../includes/admin_header.php');
     }).then((result) => {
         if (result.isConfirmed) {
             window.location.href = 'restore_user.php?id=' + id;
+        }
+    })
+  }
+
+  // SweetAlert Delete Confirmation
+  function confirmDelete(id) {
+    Swal.fire({
+        title: 'Permanently delete this account?',
+        text: "This action cannot be undone. All associated data will be lost.",
+        icon: 'error',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545', 
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, delete permanently!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Adjust this URL to match your actual hard-delete script
+            window.location.href = 'delete_user_permanent.php?id=' + id;
         }
     })
   }

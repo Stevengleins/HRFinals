@@ -24,11 +24,20 @@ $result = $stmt->get_result();
 $employeeProfile = $result->fetch_assoc();
 $stmt->close();
 
-// Smart Fallbacks
+// Smart Fallbacks & Full Name Construction
 $display_first = !empty($employeeProfile['first_name']) ? $employeeProfile['first_name'] : $employeeProfile['u_first'];
+$display_middle = !empty($employeeProfile['middle_name']) ? $employeeProfile['middle_name'] : '';
 $display_last  = !empty($employeeProfile['last_name']) ? $employeeProfile['last_name'] : $employeeProfile['u_last'];
+$display_suffix = !empty($employeeProfile['suffix']) ? $employeeProfile['suffix'] : '';
+$full_display_name = trim(preg_replace('/\s+/', ' ', "$display_first $display_middle $display_last $display_suffix"));
+
 $display_email = !empty($employeeProfile['email']) ? $employeeProfile['email'] : $employeeProfile['u_email'];
 $display_role  = !empty($employeeProfile['role']) ? $employeeProfile['role'] : $employeeProfile['u_role'];
+
+// Format the shift for read-only display
+$shift_start = !empty($employeeProfile['shift_start']) ? $employeeProfile['shift_start'] : '08:00:00';
+$shift_end = !empty($employeeProfile['shift_end']) ? $employeeProfile['shift_end'] : '17:00:00';
+$formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
 
 if (isset($_POST['update_profile'])) {
     $email = trim($_POST['email']);
@@ -54,6 +63,7 @@ if (isset($_POST['update_profile'])) {
             $password_updating = false;
             $hashed_password = $employeeProfile['u_password'];
 
+            // Server-side fallback validation just in case they bypass JS
             if (!empty($new_password)) {
                 if (strlen($new_password) < 8 || !preg_match("/[0-9]/", $new_password) || !preg_match("/[!@#$%^&*(),.?\":{}|<>]/", $new_password)) {
                     $password_error = 'Password must be at least 8 characters and include a number and a special character.';
@@ -66,16 +76,13 @@ if (isset($_POST['update_profile'])) {
             }
 
             if (empty($password_error)) {
-                // BEGIN TRANSACTION to update both tables
                 $mysql->begin_transaction();
 
                 try {
-                    // Update user table
                     $updateUser = $mysql->prepare("UPDATE user SET email = ?, password = ? WHERE user_id = ?");
                     $updateUser->bind_param("ssi", $email, $hashed_password, $user_id);
                     $updateUser->execute();
 
-                    // Update employee_details table
                     $updateEmp = $mysql->prepare("UPDATE employee_details SET email = ? WHERE user_id = ?");
                     $updateEmp->bind_param("si", $email, $user_id);
                     $updateEmp->execute();
@@ -103,6 +110,14 @@ $title = "Edit Profile | WorkForcePro";
 include('../includes/employee_header.php'); 
 ?>
 
+<style>
+    /* Custom styles for validity feedback */
+    .input-group .form-control.is-valid { border-color: #28a745; background-image: none; }
+    .input-group .form-control.is-invalid { border-color: #dc3545; background-image: none; }
+    .input-group .input-group-text.is-valid { border-color: #28a745; }
+    .input-group .input-group-text.is-invalid { border-color: #dc3545; }
+</style>
+
 <div class="content-header">
   <div class="container-fluid">
     <div class="row mb-2">
@@ -125,32 +140,32 @@ include('../includes/employee_header.php');
                   </h3>
               </div>
               
-              <form method="POST" action="employee_edit_profile.php">
+              <form id="editProfileForm" method="POST" action="employee_edit_profile.php" novalidate>
                 <div class="card-body bg-light">
 
                   <div class="alert alert-secondary shadow-sm mb-4" style="border-left: 4px solid #6c757d;">
-                      <i class="fas fa-info-circle mr-2"></i> <strong>Note:</strong> Your name and system role are locked. If you need to legally change your name or details on file, please contact your HR or System Administrator.
+                      <i class="fas fa-info-circle mr-2"></i> <strong>Note:</strong> Your name, system role, and shift are locked. If you need to modify these, please contact your HR or System Administrator.
                   </div>
 
                   <div class="row">
                     <div class="col-md-6 form-group">
-                        <label class="text-dark">First Name</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_first); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <label class="text-dark">Full Name</label>
+                        <input type="text" class="form-control shadow-sm font-weight-bold text-dark" value="<?php echo htmlspecialchars($full_display_name); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                     <div class="col-md-6 form-group">
-                        <label class="text-dark">Last Name</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_last); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <label class="text-dark"><i class="fas fa-clock mr-1 text-primary"></i> Assigned Shift</label>
+                        <input type="text" class="form-control shadow-sm font-weight-bold text-primary" value="<?php echo $formatted_shift; ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                   </div>
 
                   <div class="row mt-2">
                     <div class="col-md-6 form-group">
-                        <label class="text-dark">Email Address (Login ID)</label>
-                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars(isset($_POST['email']) ? $_POST['email'] : $display_email); ?>" required>
+                        <label class="text-dark">System Role</label>
+                        <input type="text" class="form-control shadow-sm text-dark" value="<?php echo htmlspecialchars($display_role); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
                     </div>
                     <div class="col-md-6 form-group">
-                        <label class="text-dark">System Role</label>
-                        <input type="text" class="form-control shadow-sm" value="<?php echo htmlspecialchars($display_role); ?>" readonly style="background-color: #e9ecef; cursor: not-allowed;">
+                        <label class="text-dark">Email Address (Login ID)</label>
+                        <input type="email" name="email" class="form-control shadow-sm" value="<?php echo htmlspecialchars(isset($_POST['email']) ? $_POST['email'] : $display_email); ?>" required>
                     </div>
                   </div>
 
@@ -170,6 +185,7 @@ include('../includes/employee_header.php');
                                 </span>
                             </div>
                         </div>
+                        <small id="pwd_hint" class="form-text text-muted">Must be 8+ chars with a number and special character.</small>
                     </div>
                     
                     <div class="col-md-6 form-group">
@@ -182,6 +198,7 @@ include('../includes/employee_header.php');
                                 </span>
                             </div>
                         </div>
+                        <small id="cpwd_hint" class="form-text text-muted">Must perfectly match the password above.</small>
                     </div>
                   </div>
                   
@@ -224,6 +241,108 @@ include('../includes/employee_header.php');
           icon.classList.add('fa-eye');
       }
   }
+
+  // Instant Inline Password Validation
+  document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('editProfileForm');
+      const pwdInput = document.getElementById('new_password');
+      const cpwdInput = document.getElementById('confirm_password');
+      const pwdHint = document.getElementById('pwd_hint');
+      const cpwdHint = document.getElementById('cpwd_hint');
+      
+      // Select the adjacent span to color the border correctly
+      const pwdAddon = pwdInput.nextElementSibling.querySelector('span');
+      const cpwdAddon = cpwdInput.nextElementSibling.querySelector('span');
+
+      function validatePassword() {
+          const pwd = pwdInput.value;
+          if (pwd === '') {
+              pwdInput.classList.remove('is-valid', 'is-invalid');
+              pwdAddon.classList.remove('is-valid', 'is-invalid');
+              pwdHint.className = 'form-text text-muted';
+              pwdHint.innerText = 'Must be 8+ chars with a number and special character.';
+              return true;
+          }
+          
+          const hasNum = /[0-9]/.test(pwd);
+          const hasSpec = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+          const isLong = pwd.length >= 8;
+
+          if (hasNum && hasSpec && isLong) {
+              pwdInput.classList.remove('is-invalid');
+              pwdInput.classList.add('is-valid');
+              pwdAddon.classList.remove('is-invalid');
+              pwdAddon.classList.add('is-valid');
+              pwdHint.className = 'form-text text-success font-weight-bold';
+              pwdHint.innerText = 'Strong password!';
+              return true;
+          } else {
+              pwdInput.classList.remove('is-valid');
+              pwdInput.classList.add('is-invalid');
+              pwdAddon.classList.remove('is-valid');
+              pwdAddon.classList.add('is-invalid');
+              pwdHint.className = 'form-text text-danger font-weight-bold';
+              pwdHint.innerText = 'Weak: Need 8+ chars, 1 number, 1 special character.';
+              return false;
+          }
+      }
+
+      function validateConfirm() {
+          const pwd = pwdInput.value;
+          const cpwd = cpwdInput.value;
+          
+          if (cpwd === '' && pwd === '') {
+              cpwdInput.classList.remove('is-valid', 'is-invalid');
+              cpwdAddon.classList.remove('is-valid', 'is-invalid');
+              cpwdHint.className = 'form-text text-muted';
+              cpwdHint.innerText = 'Must perfectly match the password above.';
+              return true;
+          }
+          
+          if (cpwd === pwd && pwd !== '') {
+              cpwdInput.classList.remove('is-invalid');
+              cpwdInput.classList.add('is-valid');
+              cpwdAddon.classList.remove('is-invalid');
+              cpwdAddon.classList.add('is-valid');
+              cpwdHint.className = 'form-text text-success font-weight-bold';
+              cpwdHint.innerText = 'Passwords match!';
+              return true;
+          } else if (cpwd !== '') {
+              cpwdInput.classList.remove('is-valid');
+              cpwdInput.classList.add('is-invalid');
+              cpwdAddon.classList.remove('is-valid');
+              cpwdAddon.classList.add('is-invalid');
+              cpwdHint.className = 'form-text text-danger font-weight-bold';
+              cpwdHint.innerText = 'Passwords do not match.';
+              return false;
+          }
+          return false;
+      }
+
+      pwdInput.addEventListener('input', () => { 
+          validatePassword(); 
+          if(cpwdInput.value !== '') validateConfirm(); 
+      });
+      
+      cpwdInput.addEventListener('input', validateConfirm);
+
+      form.addEventListener('submit', function(e) {
+          if (pwdInput.value !== '') {
+              const isPwdValid = validatePassword();
+              const isCpwdValid = validateConfirm();
+              
+              if (!isPwdValid || !isCpwdValid) {
+                  e.preventDefault();
+                  Swal.fire({
+                      icon: 'error',
+                      title: 'Invalid Password',
+                      text: 'Please ensure your new password meets the security requirements and matches the confirmation box.',
+                      confirmButtonColor: '#212529'
+                  });
+              }
+          }
+      });
+  });
 </script>
 
 <?php

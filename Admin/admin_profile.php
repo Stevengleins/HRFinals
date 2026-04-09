@@ -23,11 +23,27 @@ $result = $stmt->get_result();
 $adminProfile = $result->fetch_assoc();
 $stmt->close();
 
-// Smart Fallbacks (In case the Admin doesn't have an employee_details record yet)
-$display_first = !empty($adminProfile['first_name']) ? $adminProfile['first_name'] : $adminProfile['u_first'];
-$display_last  = !empty($adminProfile['last_name']) ? $adminProfile['last_name'] : $adminProfile['u_last'];
+// Smart Fallbacks (Includes Middle Name and Suffix)
+$display_first  = !empty($adminProfile['first_name']) ? $adminProfile['first_name'] : $adminProfile['u_first'];
+$display_middle = !empty($adminProfile['middle_name']) ? $adminProfile['middle_name'] : '';
+$display_last   = !empty($adminProfile['last_name']) ? $adminProfile['last_name'] : $adminProfile['u_last'];
+$display_suffix = !empty($adminProfile['suffix']) ? $adminProfile['suffix'] : '';
+
 $display_email = !empty($adminProfile['email']) ? $adminProfile['email'] : $adminProfile['u_email'];
 $display_role  = !empty($adminProfile['role']) ? $adminProfile['role'] : $adminProfile['u_role'];
+
+// Construct proper Full Name cleanly
+$name_parts = [];
+if (!empty($display_first)) $name_parts[] = $display_first;
+if (!empty($display_middle)) $name_parts[] = $display_middle;
+if (!empty($display_last)) $name_parts[] = $display_last;
+if (!empty($display_suffix)) $name_parts[] = $display_suffix;
+$full_display_name = implode(' ', $name_parts);
+
+// NEW: Setup the specific shift text for the display profile
+$shift_start = !empty($adminProfile['shift_start']) ? $adminProfile['shift_start'] : '08:00:00';
+$shift_end = !empty($adminProfile['shift_end']) ? $adminProfile['shift_end'] : '17:00:00';
+$formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
 
 $title = "Admin Profile | WorkForcePro";
 include('../includes/admin_header.php'); 
@@ -61,9 +77,9 @@ include('../includes/admin_header.php');
                     <?php if(!empty($adminProfile['profile_image'])): ?>
                         <img src="../<?php echo htmlspecialchars($adminProfile['profile_image']); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
                     <?php else: ?>
-                        <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($display_first . ' ' . $display_last); ?>&background=343a40&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; border: 3px solid #ffffff;">
+                        <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($full_display_name); ?>&background=343a40&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; border: 3px solid #ffffff;">
                     <?php endif; ?>
-                    <h4 class="mt-3 font-weight-bold text-dark"><?php echo htmlspecialchars($display_first . ' ' . $display_last); ?></h4>
+                    <h4 class="mt-3 font-weight-bold text-dark"><?php echo htmlspecialchars($full_display_name); ?></h4>
                     <p class="text-muted mb-0"><?php echo htmlspecialchars($adminProfile['position'] ?? 'Position Not Set'); ?></p>
                     <span class="badge bg-danger px-2 py-1 mt-2"><i class="fas fa-user-shield mr-1"></i> <?php echo htmlspecialchars($display_role); ?></span>
                 </div>
@@ -86,6 +102,11 @@ include('../includes/admin_header.php');
                         </div>
                     </div>
                     <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-clock mr-2"></i>Assigned Shift</span>
+                            <span class="text-primary font-weight-bold ml-4"><?php echo $formatted_shift; ?></span>
+                        </div>
+                        
                         <div class="mb-3">
                             <span class="text-muted font-weight-bold d-block"><i class="fas fa-venus-mars mr-2"></i>Gender</span>
                             <span class="text-dark ml-4"><?php echo htmlspecialchars($adminProfile['gender'] ?? 'Not Provided'); ?></span>

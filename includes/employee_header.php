@@ -3,12 +3,17 @@
 require_once(__DIR__ . '/../database.php');
 
 $sidebarFirstName = isset($_SESSION['first_name']) ? $_SESSION['first_name'] : 'Employee';
+$sidebarLastName = isset($_SESSION['last_name']) ? $_SESSION['last_name'] : '';
+$sidebarFullName = trim($sidebarFirstName . ' ' . $sidebarLastName);
+if (empty($sidebarFullName)) $sidebarFullName = 'Employee'; // Fallback if both are empty
+
 $sidebarEmail = 'employee@workforce.com'; // Default fallback
 $sidebarRole = 'Employee';
+$sidebarProfileImage = null;
 
 // Fetch the current user's details from the database if they are logged in
 if (isset($_SESSION['user_id'])) {
-    $headerStmt = $mysql->prepare("SELECT email, role FROM user WHERE user_id = ?");
+    $headerStmt = $mysql->prepare("SELECT u.email, u.role, e.profile_image FROM user u LEFT JOIN employee_details e ON u.user_id = e.user_id WHERE u.user_id = ?");
     if ($headerStmt) {
         $headerStmt->bind_param("i", $_SESSION['user_id']);
         $headerStmt->execute();
@@ -17,6 +22,7 @@ if (isset($_SESSION['user_id'])) {
             $headerUser = $headerResult->fetch_assoc();
             $sidebarEmail = $headerUser['email'];
             $sidebarRole = $headerUser['role'];
+            $sidebarProfileImage = $headerUser['profile_image'];
         }
         $headerStmt->close();
     }
@@ -67,25 +73,29 @@ if (isset($_SESSION['user_id'])) {
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4 d-flex flex-column">
-    <a href="employee_dashboard.php" class="brand-link d-flex align-items-center justify-content-center border-bottom-0">
-      <img src="../logo.png" alt="WORKFORCEPRO" style="max-height: 48px; width: auto; margin-right: 10px;" />
-      <span class="brand-text m-0 font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
+    <a href="../Admin/dashboard.php" class="brand-link border-bottom-0">
+      <img src="../logo.png" alt="WORKFORCEPRO" class="brand-image" style="opacity: 1; max-height: 35px; border-radius: 4px;" />
+      <span class="brand-text font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
     </a>
 
     <div class="sidebar flex-grow-1 d-flex flex-column">
       
-      <div class="user-panel mt-2 pb-3 pt-3 mb-3 d-flex align-items-center shadow-sm" style="background-color: #454d55; border-radius: 8px; margin-left: 8px; margin-right: 8px;">
-        <div class="image pr-2 pl-2">
+      <div class="user-panel mt-2 pb-3 pt-3 mb-3 d-flex align-items-center justify-content-center shadow-sm" style="background-color: #454d55; border-radius: 8px; margin-left: 4px; margin-right: 4px;">
+        <div class="image px-1">
             <a href="employee_profile.php">
-                <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($sidebarFirstName); ?>&background=17a2b8&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 45px; height: 45px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php if (!empty($sidebarProfileImage)): ?>
+                    <img src="../<?php echo htmlspecialchars($sidebarProfileImage); ?>" class="img-circle elevation-2" alt="User Image" style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php else: ?>
+                    <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($sidebarFullName); ?>&background=17a2b8&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #ffffff;">
+                <?php endif; ?>
             </a>
         </div>
-        <div class="info d-flex flex-column align-items-start pl-1" style="overflow: hidden;">
-            <a href="employee_profile.php" class="d-block text-white font-weight-bold mb-0" style="font-size: 1rem; line-height: 1.2; text-decoration: none;">
-                <?php echo htmlspecialchars($sidebarFirstName); ?>
+        <div class="info d-flex flex-column align-items-start pl-1" style="overflow: hidden; max-width: 160px;">
+            <a href="employee_profile.php" class="d-block text-white font-weight-bold mb-0 text-truncate" style="font-size: 1rem; line-height: 1.2; text-decoration: none; width: 100%;">
+                <?php echo htmlspecialchars($sidebarFullName); ?>
             </a>
             
-            <small class="text-light d-block text-truncate" style="width: 140px; font-size: 0.8rem; line-height: 1.2; margin-top: 2px; opacity: 0.8;">
+            <small class="text-light d-block text-truncate" style="width: 100%; font-size: 0.8rem; line-height: 1.2; margin-top: 2px; opacity: 0.8;">
                 <?php echo htmlspecialchars($sidebarEmail); ?>
             </small>
             

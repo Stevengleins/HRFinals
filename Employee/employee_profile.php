@@ -29,6 +29,11 @@ $display_last  = !empty($employeeProfile['last_name']) ? $employeeProfile['last_
 $display_email = !empty($employeeProfile['email']) ? $employeeProfile['email'] : $employeeProfile['u_email'];
 $display_role  = !empty($employeeProfile['role']) ? $employeeProfile['role'] : $employeeProfile['u_role'];
 
+// Format the shift for display
+$shift_start = !empty($employeeProfile['shift_start']) ? $employeeProfile['shift_start'] : '08:00:00';
+$shift_end = !empty($employeeProfile['shift_end']) ? $employeeProfile['shift_end'] : '17:00:00';
+$formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
+
 $title = "My Profile | WorkForcePro";
 include('../includes/employee_header.php'); 
 ?>
@@ -86,6 +91,11 @@ include('../includes/employee_header.php');
                         </div>
                     </div>
                     <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted font-weight-bold d-block"><i class="fas fa-clock mr-2"></i>Assigned Shift</span>
+                            <span class="text-primary font-weight-bold ml-4"><?php echo $formatted_shift; ?></span>
+                        </div>
+
                         <div class="mb-3">
                             <span class="text-muted font-weight-bold d-block"><i class="fas fa-venus-mars mr-2"></i>Gender</span>
                             <span class="text-dark ml-4"><?php echo htmlspecialchars($employeeProfile['gender'] ?? 'Not Provided'); ?></span>
