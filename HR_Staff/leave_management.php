@@ -47,7 +47,7 @@ $result = $mysql->query($query);
                 <th>Reason</th>
                 <th>Date Applied</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>View Summary</th>
               </tr>
             </thead>
             <tbody>
@@ -71,12 +71,17 @@ $result = $mysql->query($query);
                     ?>
                 </td>
                 <td>
-                    <?php if($row['status'] == 'Pending'): ?>
-                        <button onclick="updateLeaveStatus(<?php echo $row['leave_id']; ?>, 'Approved')" class="btn btn-sm btn-success shadow-sm mr-1" title="Approve"><i class="fas fa-check"></i></button>
-                        <button onclick="updateLeaveStatus(<?php echo $row['leave_id']; ?>, 'Rejected')" class="btn btn-sm btn-danger shadow-sm" title="Reject"><i class="fas fa-times"></i></button>
-                    <?php else: ?>
-                        <span class="text-muted text-sm">Actioned</span>
-                    <?php endif; ?>
+                    <button onclick="viewLeaveRequest(this)" class="btn btn-sm btn-primary shadow-sm" title="View" 
+                            data-id="<?php echo $row['leave_id']; ?>" 
+                            data-name="<?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?>" 
+                            data-type="<?php echo htmlspecialchars($row['leave_type']); ?>" 
+                            data-start="<?php echo date('M d, Y', strtotime($row['start_date'])); ?>" 
+                            data-end="<?php echo date('M d, Y', strtotime($row['end_date'])); ?>" 
+                            data-reason="<?php echo htmlspecialchars($row['reason']); ?>" 
+                            data-applied="<?php echo date('M d, Y g:i A', strtotime($row['date_applied'])); ?>" 
+                            data-status="<?php echo $row['status']; ?>">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </td>
               </tr>
               <?php endwhile; else: ?>
@@ -92,31 +97,93 @@ $result = $mysql->query($query);
   </div>
 </section>
 
+<!-- Leave Request Modal -->
+<div class="modal fade" id="leaveModal" tabindex="-1" role="dialog" aria-labelledby="leaveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="leaveModalLabel">Leave Request Summary</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">
+            <p><strong>Employee Name:</strong> <span id="modalEmployeeName"></span></p>
+            <p><strong>Leave Type:</strong> <span id="modalLeaveType"></span></p>
+            <p><strong>Start Date:</strong> <span id="modalStartDate"></span></p>
+            <p><strong>End Date:</strong> <span id="modalEndDate"></span></p>
+          </div>
+          <div class="col-md-6">
+            <p><strong>Reason:</strong> <span id="modalReason"></span></p>
+            <p><strong>Date Applied:</strong> <span id="modalDateApplied"></span></p>
+            <p><strong>Status:</strong> <span id="modalStatus"></span></p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" id="modalActions">
+        <!-- Buttons will be added here by JavaScript -->
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php include '../includes/footer.php'; ?>
 
 <script>
+function viewLeaveRequest(button) {
+    // Populate modal with data
+    document.getElementById('modalEmployeeName').textContent = button.getAttribute('data-name');
+    document.getElementById('modalLeaveType').textContent = button.getAttribute('data-type');
+    document.getElementById('modalStartDate').textContent = button.getAttribute('data-start');
+    document.getElementById('modalEndDate').textContent = button.getAttribute('data-end');
+    document.getElementById('modalReason').textContent = button.getAttribute('data-reason');
+    document.getElementById('modalDateApplied').textContent = button.getAttribute('data-applied');
+    const status = button.getAttribute('data-status');
+    document.getElementById('modalStatus').textContent = status;
+    
+    // Clear previous actions
+    const modalActions = document.getElementById('modalActions');
+    modalActions.innerHTML = '';
+    
+    // Add buttons if pending
+    if (status === 'Pending') {
+        modalActions.innerHTML = `
+            <button onclick="updateLeaveStatus(${button.getAttribute('data-id')}, 'Approved')" class="btn btn-success mr-2" title="Approve">
+                <i class="fas fa-check"></i> Approve
+            </button>
+            <button onclick="updateLeaveStatus(${button.getAttribute('data-id')}, 'Rejected')" class="btn btn-danger" title="Reject">
+                <i class="fas fa-times"></i> Reject
+            </button>
+        `;
+    } else {
+        modalActions.innerHTML = '<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>';
+    }
+    
+    // Show modal
+    $('#leaveModal').modal('show');
+}
+
 function updateLeaveStatus(leaveId, newStatus) {
+    // Close the modal first
+    $('#leaveModal').modal('hide');
+    
     if (newStatus === 'Rejected') {
         Swal.fire({
             title: 'Reject Leave Request',
-            text: 'Please provide a reason for rejecting this leave:',
+            text: 'Please provide a reason for rejecting this leave (optional):',
             input: 'textarea',
             inputPlaceholder: 'Enter your reason here...',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc3545',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Submit Rejection',
-            preConfirm: (reason) => {
-                if (!reason.trim()) {
-                    Swal.showValidationMessage('A reason is required to reject a leave request.');
-                }
-                return reason;
-            }
+            confirmButtonText: 'Submit Rejection'
         }).then((result) => {
             if (result.isConfirmed) {
                 // Encode the text so it can safely pass through the URL
-                let encodedReason = encodeURIComponent(result.value);
+                let encodedReason = encodeURIComponent(result.value || '');
                 window.location.href = `process_leave.php?id=${leaveId}&status=${newStatus}&reason=${encodedReason}`;
             }
         });
