@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 20, 2026 at 11:17 AM
+-- Generation Time: Apr 10, 2026 at 06:31 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -28,19 +28,34 @@ SET time_zone = "+00:00";
 --
 
 CREATE TABLE `attendance` (
-  `id` int(11) NOT NULL,
+  `attendance_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
   `date` date NOT NULL,
-  `time_in` time NOT NULL,
-  `time_out` time DEFAULT NULL
+  `time_in` datetime DEFAULT NULL,
+  `time_out` datetime DEFAULT NULL,
+  `total_hours` decimal(5,2) DEFAULT 0.00,
+  `regular_hours` decimal(5,2) DEFAULT 0.00,
+  `overtime_hours` decimal(5,2) DEFAULT 0.00,
+  `overtime_status` enum('None','Pending','Approved','Rejected') DEFAULT 'None',
+  `status` enum('Present','Late','Half-Day','Absent') DEFAULT 'Present',
+  `notes` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `attendance`
 --
 
-INSERT INTO `attendance` (`id`, `user_id`, `date`, `time_in`, `time_out`) VALUES
-(2, 3, '2026-03-20', '18:16:25', '18:16:31');
+INSERT INTO `attendance` (`attendance_id`, `user_id`, `date`, `time_in`, `time_out`, `total_hours`, `regular_hours`, `overtime_hours`, `overtime_status`, `status`, `notes`) VALUES
+(6, 3, '2026-04-06', '2026-04-06 08:15:00', '2026-04-06 17:00:00', 8.75, 8.00, 0.00, 'None', 'Late', 'Heavy traffic on EDSA'),
+(7, 3, '2026-04-07', '2026-04-07 08:30:00', '2026-04-07 17:00:00', 8.50, 8.00, 0.00, 'None', 'Late', 'Bus broke down'),
+(8, 3, '2026-04-08', '2026-04-08 07:55:00', '2026-04-08 19:00:00', 11.08, 8.00, 3.08, 'Pending', 'Present', 'Stayed late to finish pending system updates'),
+(9, 3, '2026-04-09', '2026-04-09 07:50:00', '2026-04-09 19:30:00', 11.66, 8.00, 3.66, 'Approved', 'Present', 'Overtime approved by Admin for deployment'),
+(10, 3, '2026-04-10', '2026-04-10 08:00:00', '2026-04-10 17:00:00', 9.00, 8.00, 0.00, 'None', 'Present', NULL),
+(11, 16, '2026-04-06', '2026-04-06 07:50:00', '2026-04-06 17:00:00', 9.16, 8.00, 0.00, 'None', 'Present', NULL),
+(12, 16, '2026-04-07', NULL, NULL, 0.00, 0.00, 0.00, 'None', 'Absent', 'Called in sick - Medical Certificate sent to HR'),
+(13, 16, '2026-04-08', '2026-04-08 08:00:00', '2026-04-08 12:00:00', 4.00, 4.00, 0.00, 'None', 'Half-Day', 'Still feeling unwell, went home early'),
+(14, 16, '2026-04-09', '2026-04-09 07:55:00', '2026-04-09 17:00:00', 9.08, 8.00, 0.00, 'None', 'Present', 'Fully recovered and back to work'),
+(15, 16, '2026-04-10', '2026-04-10 08:05:00', '2026-04-10 17:00:00', 8.91, 8.00, 0.00, 'None', 'Late', 'Slightly late, rain delay');
 
 -- --------------------------------------------------------
 
@@ -54,6 +69,7 @@ CREATE TABLE `employee_details` (
   `first_name` varchar(100) NOT NULL,
   `middle_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) NOT NULL,
+  `suffix` varchar(10) DEFAULT NULL,
   `email` varchar(255) NOT NULL,
   `gender` varchar(20) DEFAULT NULL,
   `birth_date` date DEFAULT NULL,
@@ -61,6 +77,8 @@ CREATE TABLE `employee_details` (
   `address` text DEFAULT NULL,
   `join_date` date DEFAULT NULL,
   `position` varchar(100) DEFAULT NULL,
+  `shift_start` time DEFAULT '08:00:00',
+  `shift_end` time DEFAULT '17:00:00',
   `role` varchar(50) NOT NULL,
   `profile_image` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -69,11 +87,10 @@ CREATE TABLE `employee_details` (
 -- Dumping data for table `employee_details`
 --
 
-INSERT INTO `employee_details` (`id`, `user_id`, `first_name`, `middle_name`, `last_name`, `email`, `gender`, `birth_date`, `mobile_number`, `address`, `join_date`, `position`, `role`, `profile_image`) VALUES
-(1, 12, 'Christian Meynard', 'Balbada', 'Samonte', 'meynardxt24@gmail.com', 'Male', '2005-02-24', '+639273262233', 'Block 6, Lot 21, Ipil St. Hillcrest Village, Caloocan City', '2026-03-20', 'Admin', 'Admin', NULL),
-(2, 2, 'Gerardo', 'Flores', 'Loquinario', 'staff123@gmail.com', 'Male', '0000-00-00', '', '', NULL, 'HR Staff', 'HR Staff', NULL),
-(3, 3, 'Jairus', '', 'Fernandez', 'employee1@gmail.com', 'Male', '0000-00-00', '', '', NULL, '', 'Employee', NULL),
-(4, 4, 'Karl Christian', 'Azucena', 'Telan', 'Karltitilan@gmail.com', '', '0000-00-00', '', '', NULL, 'Employee', 'Employee', NULL);
+INSERT INTO `employee_details` (`id`, `user_id`, `first_name`, `middle_name`, `last_name`, `suffix`, `email`, `gender`, `birth_date`, `mobile_number`, `address`, `join_date`, `position`, `shift_start`, `shift_end`, `role`, `profile_image`) VALUES
+(2, 2, 'Gerardo', 'Flores', 'Loquinario', NULL, 'staff123@gmail.com', 'Male', '0000-00-00', '', '', NULL, 'HR Staff', '08:00:00', '17:00:00', 'HR Staff', NULL),
+(3, 3, 'Jairus', NULL, 'Fernandez', NULL, 'employee1@gmail.com', 'Male', '0000-00-00', '', '', NULL, 'Employee', '08:00:00', '17:00:00', 'Employee', NULL),
+(5, 16, 'Christian Meynard', 'Balbada', 'Samonte', 'II', 'xtnetomak@gmail.com', 'Male', '2005-02-24', '+639273262233', 'Blk 6, Lot 21, Ipil st. Hillcrest Village, Caloocan City', '2026-04-09', 'Employee', '08:00:00', '17:00:00', 'Employee', NULL);
 
 -- --------------------------------------------------------
 
@@ -100,8 +117,7 @@ INSERT INTO `employee_requests` (`request_id`, `user_id`, `request_type`, `subje
 (2, 3, 'Attendance Issue', '5', 'papalit', 'Pending', '2026-03-14 23:16:39'),
 (3, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:16:49'),
 (4, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:17:17'),
-(5, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:24:29'),
-(6, 4, 'Other', 'qwe', 'asd', 'Reviewed', '2026-03-15 01:31:23');
+(5, 3, 'Attendance Issue', '5', 'papalit', 'Reviewed', '2026-03-14 23:24:29');
 
 -- --------------------------------------------------------
 
@@ -182,9 +198,7 @@ INSERT INTO `user` (`user_id`, `first_name`, `last_name`, `email`, `role`, `pass
 (1, 'Christian Meynard', 'Samonte', 'admin123@gmail.com', 'Admin', '$2y$10$sWN9oEL3llvoS/EoSKDudeqAHC.k.BK.GjasVVC76DLjRDxwc/kZO', 1),
 (2, 'Gerardo', 'Loquinario', 'staff123@gmail.com', 'HR Staff', '$2y$10$UMiFyRXVZzAK7SQNoC9u3usr1xGy/Rhbbs.QwuaNLh/dUJsOpcfHK', 1),
 (3, 'Jairus', 'Fernandez', 'employee1@gmail.com', 'Employee', '$2y$10$G/OlgJjgCVlb3EDfBcPbUuDiRBbgAWcKkK3ZbgtKud389LUAs/HSK', 1),
-(4, 'Karl Christian', 'Telan', 'Karltitilan@gmail.com', 'Employee', '$2y$10$E.5RN.VbT5S7KzY7FdWSPurTrz3Fp8QAcXfJgQk2aydWziy6ATqCS', 1),
-(5, 'Karl', 'Jai', 'karljai1@gmail.com', 'Employee', '$2y$10$u/W0rywFIeny6Oepb70sROoxHf/mkl1J2vrRUqWhsBZ0KhalPD/XW', 0),
-(12, 'Christian Meynard', 'Samonte', 'meynardxt24@gmail.com', 'Admin', '$2y$10$k3/gnaNWVMmLa2Dkoo7vge9ryjOoBs/iu20Ief85V2Cnz473Vu4TC', 1);
+(16, 'Christian Meynard', 'Samonte', 'xtnetomak@gmail.com', 'Employee', '$2y$10$SEXuCnefWQXEVrRU4cZh0udXHSXZzB8qy9k84kVh3GiobP3ShDAeS', 1);
 
 --
 -- Indexes for dumped tables
@@ -194,7 +208,9 @@ INSERT INTO `user` (`user_id`, `first_name`, `last_name`, `email`, `role`, `pass
 -- Indexes for table `attendance`
 --
 ALTER TABLE `attendance`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`attendance_id`),
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `date` (`date`);
 
 --
 -- Indexes for table `employee_details`
@@ -238,13 +254,13 @@ ALTER TABLE `user`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `attendance_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `employee_details`
 --
 ALTER TABLE `employee_details`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `employee_requests`
@@ -268,7 +284,7 @@ ALTER TABLE `payroll`
 -- AUTO_INCREMENT for table `user`
 --
 ALTER TABLE `user`
-  MODIFY `user_id` int(255) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `user_id` int(255) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- Constraints for dumped tables
