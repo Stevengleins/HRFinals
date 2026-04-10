@@ -9,24 +9,35 @@ if (empty($sidebarFullName)) $sidebarFullName = 'HR Staff'; // Fallback if both 
 
 $sidebarEmail = 'hr@workforce.com'; // Default fallback
 $sidebarRole = 'HR Staff';
-$sidebarProfileImage = null;
+$sidebarProfileImage = '';
 
 // Fetch the current user's details from the database if they are logged in
 if (isset($_SESSION['user_id'])) {
-    $headerStmt = $mysql->prepare("SELECT u.email, u.role, e.profile_image FROM user u LEFT JOIN employee_details e ON u.user_id = e.user_id WHERE u.user_id = ?");
+    $headerStmt = $mysql->prepare("SELECT u.first_name, u.last_name, u.email, u.role, e.profile_image FROM user u LEFT JOIN employee_details e ON u.user_id = e.user_id WHERE u.user_id = ?");
     if ($headerStmt) {
         $headerStmt->bind_param("i", $_SESSION['user_id']);
         $headerStmt->execute();
         $headerResult = $headerStmt->get_result();
         if ($headerResult->num_rows > 0) {
             $headerUser = $headerResult->fetch_assoc();
+            
+            $sidebarFullName = trim($headerUser['first_name'] . ' ' . $headerUser['last_name']);
             $sidebarEmail = $headerUser['email'];
             $sidebarRole = $headerUser['role'];
-            $sidebarProfileImage = $headerUser['profile_image'];
+            
+            // THE ULTIMATE FIX: Verify the physical file actually exists on the server!
+            $rawImagePath = trim((string)$headerUser['profile_image']);
+            if (!empty($rawImagePath) && file_exists(__DIR__ . '/../' . $rawImagePath)) {
+                $sidebarProfileImage = $rawImagePath;
+            } else {
+                $sidebarProfileImage = ''; // Force fallback if file is missing
+            }
         }
         $headerStmt->close();
     }
 }
+
+if (empty(trim($sidebarFullName))) $sidebarFullName = 'HR Staff';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -73,7 +84,7 @@ if (isset($_SESSION['user_id'])) {
   </nav>
 
   <aside class="main-sidebar sidebar-dark-primary elevation-4 d-flex flex-column">
-    <a href="../Admin/dashboard.php" class="brand-link border-bottom-0">
+    <a href="../HR_Staff/hr_dashboard.php" class="brand-link border-bottom-0">
       <img src="../logo.png" alt="WORKFORCEPRO" class="brand-image" style="opacity: 1; max-height: 35px; border-radius: 4px;" />
       <span class="brand-text font-weight-bold">WORK<span class="font-weight-normal">FORCEPRO</span></span>
     </a>

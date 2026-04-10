@@ -40,10 +40,14 @@ if (!empty($display_last)) $name_parts[] = $display_last;
 if (!empty($display_suffix)) $name_parts[] = $display_suffix;
 $full_display_name = implode(' ', $name_parts);
 
-// NEW: Setup the specific shift text for the display profile
+// Setup the specific shift text for the display profile
 $shift_start = !empty($adminProfile['shift_start']) ? $adminProfile['shift_start'] : '08:00:00';
 $shift_end = !empty($adminProfile['shift_end']) ? $adminProfile['shift_end'] : '17:00:00';
 $formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
+
+// THE ULTIMATE FIX: Check if image physically exists
+$rawImagePath = trim((string)$adminProfile['profile_image']);
+$validImage = (!empty($rawImagePath) && file_exists(__DIR__ . '/../' . $rawImagePath)) ? $rawImagePath : '';
 
 $title = "Admin Profile | WorkForcePro";
 include('../includes/admin_header.php'); 
@@ -74,8 +78,8 @@ include('../includes/admin_header.php');
               <div class="card-body bg-light">
                 
                 <div class="text-center mb-4">
-                    <?php if(!empty($adminProfile['profile_image'])): ?>
-                        <img src="../<?php echo htmlspecialchars($adminProfile['profile_image']); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
+                    <?php if($validImage !== ''): ?>
+                        <img src="../<?php echo htmlspecialchars($validImage); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
                     <?php else: ?>
                         <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($full_display_name); ?>&background=343a40&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; border: 3px solid #ffffff;">
                     <?php endif; ?>

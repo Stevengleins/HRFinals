@@ -34,6 +34,10 @@ $shift_start = !empty($hrProfile['shift_start']) ? $hrProfile['shift_start'] : '
 $shift_end = !empty($hrProfile['shift_end']) ? $hrProfile['shift_end'] : '17:00:00';
 $formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
 
+// THE ULTIMATE FIX: Check if image physically exists
+$rawImagePath = trim((string)$hrProfile['profile_image']);
+$validImage = (!empty($rawImagePath) && file_exists(__DIR__ . '/../' . $rawImagePath)) ? $rawImagePath : '';
+
 $title = "My Profile | WorkForcePro";
 include('../includes/hr_header.php'); 
 ?>
@@ -63,8 +67,8 @@ include('../includes/hr_header.php');
               <div class="card-body bg-light">
                 
                 <div class="text-center mb-4">
-                    <?php if(!empty($hrProfile['profile_image'])): ?>
-                        <img src="../<?php echo htmlspecialchars($hrProfile['profile_image']); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
+                    <?php if($validImage !== ''): ?>
+                        <img src="../<?php echo htmlspecialchars($validImage); ?>" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #ffffff;">
                     <?php else: ?>
                         <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($display_first . ' ' . $display_last); ?>&background=28a745&color=ffffff" class="img-circle elevation-2" alt="User Image" style="width: 120px; height: 120px; border: 3px solid #ffffff;">
                     <?php endif; ?>

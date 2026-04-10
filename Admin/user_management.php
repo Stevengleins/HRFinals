@@ -135,10 +135,15 @@ include('../includes/admin_header.php');
                     $display_email = !empty($row['email']) ? $row['email'] : $row['u_email'];
                     $display_role  = !empty($row['role']) ? $row['role'] : $row['u_role'];
                     
-                    // Avatar logic
-                    $avatar = !empty($row['profile_image']) ? '../' . htmlspecialchars($row['profile_image']) : "https://ui-avatars.com/api/?name=" . urlencode($full_name) . "&background=343a40&color=ffffff";
+                    // Avatar logic WITH PHYSICAL FILE CHECK
+                    $rawImagePath = trim((string)$row['profile_image']);
+                    if (!empty($rawImagePath) && file_exists(__DIR__ . '/../' . $rawImagePath)) {
+                        $avatar = '../' . htmlspecialchars($rawImagePath);
+                    } else {
+                        $avatar = "https://ui-avatars.com/api/?name=" . urlencode($full_name) . "&background=343a40&color=ffffff";
+                    }
                     
-                    // NEW: Formatting the shift for the Data attributes
+                    // Formatting the shift for the Data attributes
                     $shift_start = !empty($row['shift_start']) ? $row['shift_start'] : '08:00:00';
                     $shift_end = !empty($row['shift_end']) ? $row['shift_end'] : '17:00:00';
                     $formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
@@ -299,8 +304,6 @@ include('../includes/admin_header.php');
         $('#modalBirth').text($(this).data('birth'));
         $('#modalJoin').text($(this).data('join'));
         $('#modalAddress').text($(this).data('address'));
-        
-        // NEW: Populate the Shift Field in the Modal
         $('#modalShift').text($(this).data('shift'));
 
         $('#viewProfileModal').modal('show');
