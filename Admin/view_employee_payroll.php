@@ -47,7 +47,6 @@ $payrollQuery = $mysql->query("
         undertime_deduction,
         late_deduction,
         total_mandatory_deductions,
-        withholding_tax,
         deductions,
         net_salary,
         status, 
@@ -61,7 +60,6 @@ $summaryQuery = $mysql->prepare("SELECT
         COUNT(*) AS total_records,
         COALESCE(SUM(gross_salary), 0) AS total_gross_salary,
         COALESCE(SUM(total_mandatory_deductions), 0) AS total_mandatory_deductions,
-        COALESCE(SUM(withholding_tax), 0) AS total_withholding_tax,
         COALESCE(SUM(deductions), 0) AS total_deductions,
         COALESCE(SUM(net_salary), 0) AS total_net_salary
     FROM payroll
@@ -73,7 +71,6 @@ $summary = $summaryQuery->get_result()->fetch_assoc();
 $totalRecords = $summary['total_records'] ?? 0;
 $totalGrossSalary = $summary['total_gross_salary'] ?? 0;
 $totalMandatoryDeductions = $summary['total_mandatory_deductions'] ?? 0;
-$totalWithholdingTax = $summary['total_withholding_tax'] ?? 0;
 $totalDeductions = $summary['total_deductions'] ?? 0;
 $totalNetSalary = $summary['total_net_salary'] ?? 0;
 
@@ -154,7 +151,6 @@ include '../includes/admin_header.php';
                 <th>Days Worked</th>
                 <th>Gross Salary</th>
                 <th>Mandatory Deductions</th>
-                <th>Withholding Tax</th>
                 <th>Net Salary</th>
                 <th>Status</th>
                 <th>Action</th>
@@ -168,7 +164,6 @@ include '../includes/admin_header.php';
                     <td><?php echo (int)$row['days_worked']; ?></td>
                     <td>₱<?php echo number_format($row['gross_salary'], 2); ?></td>
                     <td>₱<?php echo number_format($row['total_mandatory_deductions'], 2); ?></td>
-                    <td>₱<?php echo number_format($row['withholding_tax'], 2); ?></td>
                     <td class="font-weight-bold">₱<?php echo number_format($row['net_salary'], 2); ?></td>
                     <td>
                       <?php if ($row['status'] === 'Released'): ?>
