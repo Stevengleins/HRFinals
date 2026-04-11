@@ -180,29 +180,36 @@ if (isset($_POST['register_user'])) {
                     $mail->isHTML(true);
                     $mail->Subject = 'Official System Credentials - WorkForcePro';
                     
+                    // CRISP PURE WHITE EMAIL TEMPLATE WITH EMBEDDED LOGO
                     $mail->Body = "
-                    <div style=\"font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; background-color: #ffffff;\">
-                        <div style=\"background-color: #212529; padding: 20px; text-align: center;\">
-                            <h1 style=\"color: #ffffff; margin: 0; font-size: 24px;\">WorkForcePro</h1>
+                    <div style=\"font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background-color: #ffffff;\">
+                        <div style=\"background-color: #ffffff; padding: 20px; text-align: center; border-bottom: 2px solid #222222;\">
+                            <img src=\"cid:logo\" alt=\"WORKFORCEPRO\" style=\"max-height: 35px; border-radius: 4px; vertical-align: middle; margin-right: 8px;\" />
+                            <h2 style=\"margin: 0; font-size: 22px; color: #111111; letter-spacing: 1px; display: inline-block; vertical-align: middle;\">
+                                <strong>WORK</strong><span style=\"font-weight: normal;\">FORCEPRO</span>
+                            </h2>
                         </div>
                         <div style=\"padding: 30px;\">
-                            <h2 style=\"color: #333333; margin-top: 0;\">Welcome, {$first_name}!</h2>
-                            <p style=\"color: #555555; line-height: 1.6; font-size: 16px;\">You have been successfully registered in the <strong>WorkForcePro</strong> system by an administrator. Below are your official system credentials:</p>
+                            <h2 style=\"color: #111111; margin-top: 0;\">Welcome, {$first_name}!</h2>
+                            <p style=\"color: #333333; line-height: 1.6; font-size: 14px;\">You have been successfully registered in the <strong>WorkForcePro</strong> system by an administrator. Below are your official system credentials:</p>
                             
-                            <div style=\"background-color: #f8f9fa; border-left: 4px solid #212529; padding: 15px; margin: 25px 0; border-radius: 4px;\">
-                                <p style=\"margin: 5px 0; font-size: 15px; color: #333;\"><strong>Assigned Role:</strong> {$role}</p>
-                                <p style=\"margin: 5px 0; font-size: 15px; color: #333;\"><strong>Login Email:</strong> {$email}</p>
-                                <p style=\"margin: 5px 0; font-size: 15px; color: #333;\"><strong>Temporary Password:</strong> <span style=\"background: #e2e3e5; padding: 3px 8px; border-radius: 3px; font-family: monospace; font-size: 16px;\">{$temp_password}</span></p>
+                            <div style=\"background-color: #ffffff; border: 1px solid #cccccc; border-left: 4px solid #222222; padding: 15px; margin: 25px 0; border-radius: 4px;\">
+                                <p style=\"margin: 5px 0; font-size: 14px; color: #111;\"><strong>Assigned Role:</strong> {$role}</p>
+                                <p style=\"margin: 5px 0; font-size: 14px; color: #111;\"><strong>Login Email:</strong> {$email}</p>
+                                <p style=\"margin: 5px 0; font-size: 14px; color: #111;\"><strong>Temporary Password:</strong> <span style=\"background: #f4f4f4; padding: 3px 8px; border: 1px solid #ddd; border-radius: 3px; font-family: monospace; font-size: 15px;\">{$temp_password}</span></p>
                             </div>
                             
-                            <p style=\"color: #555555; line-height: 1.6; font-size: 16px;\">For security reasons, please log in immediately and update your password from your profile settings.</p>
+                            <p style=\"color: #333333; line-height: 1.6; font-size: 14px;\">For security reasons, please log in immediately and update your password from your profile settings.</p>
                             <br>
-                            <p style=\"color: #777777; font-size: 14px; margin-bottom: 0;\">Best Regards,<br><strong>System Administrator</strong></p>
+                            <p style=\"color: #555555; font-size: 13px; margin-bottom: 0;\">Best Regards,<br><strong style=\"color:#111;\">System Administrator</strong></p>
                         </div>
-                        <div style=\"background-color: #f1f1f1; padding: 15px; text-align: center;\">
-                            <p style=\"color: #888888; font-size: 12px; margin: 0;\">This is an automated message. Please do not reply directly to this email.</p>
+                        <div style=\"background-color: #ffffff; border-top: 1px solid #cccccc; padding: 15px; text-align: center;\">
+                            <p style=\"color: #888888; font-size: 11px; margin: 0;\">This is an automatically generated electronic statement. Do not reply to this email.</p>
                         </div>
                     </div>";
+
+                    // EMBED THE LOGO SO IT SHOWS UP IN GMAIL
+                    $mail->addEmbeddedImage('../logo.png', 'logo');
 
                     $mail->send();
 

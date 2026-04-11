@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['release_payroll_id'])
     $totalDeductions = number_format($total_deductions_num, 2);
     $net = number_format($net_salary_num, 2);
 
-    // CRISP PURE WHITE EMAIL TEMPLATE
+    // CRISP PURE WHITE EMAIL TEMPLATE (NOW WITH EMBEDDED LOGO)
     $emailBody = "
     <div style='background-color: #ffffff; padding: 30px; font-family: Helvetica, Arial, sans-serif;'>
         <div style='max-width: 800px; margin: 0 auto; border: 1px solid #cccccc; background-color: #ffffff;'>
@@ -81,7 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['release_payroll_id'])
             <table width='100%' cellpadding='20' cellspacing='0' style='border-bottom: 2px solid #222222; background-color: #ffffff;'>
                 <tr>
                     <td align='left' valign='middle'>
-                        <h2 style='margin: 0; font-size: 22px; color: #111111; letter-spacing: 1px;'>
+                        <img src='cid:logo' alt='WORKFORCEPRO' style='opacity: 1; max-height: 35px; border-radius: 4px; vertical-align: middle; margin-right: 8px;' />
+                        <h2 style='margin: 0; font-size: 22px; color: #111111; letter-spacing: 1px; display: inline-block; vertical-align: middle;'>
                             <strong>WORK</strong><span style='font-weight: normal;'>FORCEPRO</span>
                         </h2>
                         <p style='margin: 5px 0 0 0; font-size: 12px; color: #555555;'>Official Corporate Records</p>
@@ -191,6 +192,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['release_payroll_id'])
         $mail->isHTML(true);
         $mail->Subject = "Official Payslip Released: $payPeriod";
         $mail->Body    = $emailBody;
+
+        // EMBED THE LOGO FOR THE EMAIL
+        $mail->addEmbeddedImage('../logo.png', 'logo');
 
         $mail->send();
         
@@ -312,32 +316,6 @@ include '../includes/admin_header.php';
           <div class="info-box-content">
             <span class="info-box-text font-weight-bold">Total Net Paid</span>
             <span class="info-box-number text-lg text-primary">₱<?php echo number_format($totalNetSalary, 0); ?></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card shadow-sm border-0 mt-2" style="border-radius: 8px; overflow: hidden;">
-      <div class="card-header bg-dark text-white py-3 border-bottom-0">
-        <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;">
-          <i class="fas fa-chart-pie mr-2"></i> Lifetime Financial Summary
-        </h3>
-      </div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-6">
-            <div style="background: #e8f4f8; border-left: 4px solid #36b9cc; color: #2c3e50; padding: 20px; border-radius: 4px; margin-bottom: 15px;">
-              <h5 class="font-weight-bold mb-2">Total Gross Earnings</h5>
-              <p style="font-size: 28px; margin: 0; color: #28a745; font-weight: bold;">₱<?php echo number_format($totalGrossSalary, 2); ?></p>
-              <small class="text-muted">Across all payroll periods</small>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div style="background: #e8faea; border-left: 4px solid #1cc88a; color: #2c3e50; padding: 20px; border-radius: 4px; margin-bottom: 15px;">
-              <h5 class="font-weight-bold mb-2">Total Net Take-Home</h5>
-              <p style="font-size: 28px; margin: 0; color: #28a745; font-weight: bold;">₱<?php echo number_format($totalNetSalary, 2); ?></p>
-              <small class="text-muted">After all deductions</small>
-            </div>
           </div>
         </div>
       </div>
@@ -487,7 +465,7 @@ include '../includes/admin_header.php';
                       </div>
                       <div style="text-align: right;">
                           ${statusBadge}
-                          <p style="margin:5px 0 0 0; font-size: 11px; color: #888;">Date Generated: ${dateGenerated}</p>
+                          <p style="margin:5px 0 0 0; font-size: 11px; color: #888;">Date Logged: ${dateGenerated}</p>
                       </div>
                   </div>
 

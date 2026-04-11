@@ -36,19 +36,26 @@ $attendance = $checkAttendance->fetch_assoc();
 $hasClockedIn = !empty($attendance['time_in']) && $attendance['time_in'] !== '0000-00-00 00:00:00';
 $hasClockedOut = !empty($attendance['time_out']) && $attendance['time_out'] !== '0000-00-00 00:00:00';
 
-// Bulletproof JS Time Sync (Passing pure Milliseconds directly from PHP)
+// Bulletproof JS Time Sync
 $timeInMs = $hasClockedIn ? (strtotime($attendance['time_in']) * 1000) : 'null';
 $timeOutMs = $hasClockedOut ? (strtotime($attendance['time_out']) * 1000) : 'null';
 $serverTimeMs = strtotime($serverTimeNow) * 1000;
 
-// Fetch Current Month DTR 
-$currentMonth = date('Y-m');
+// ==========================================================
+// DTR FILTER LOGIC
+// ==========================================================
+$selectedMonth = isset($_GET['month']) ? $_GET['month'] : date('m');
+$selectedYear = isset($_GET['year']) ? $_GET['year'] : date('Y');
+$filterDate = $selectedYear . '-' . str_pad($selectedMonth, 2, '0', STR_PAD_LEFT);
+$displayMonthYear = date('F Y', strtotime($filterDate . '-01'));
+
+// Fetch Filtered DTR (Ordered ASCENDING as requested)
 $dtrQuery = $mysql->query("
     SELECT a.*, e.shift_start, e.shift_end 
     FROM `attendance` a
     LEFT JOIN `employee_details` e ON a.user_id = e.user_id
-    WHERE a.user_id = '$user_id' AND DATE_FORMAT(a.date, '%Y-%m') = '$currentMonth'
-    ORDER BY a.date DESC
+    WHERE a.user_id = '$user_id' AND DATE_FORMAT(a.date, '%Y-%m') = '$filterDate'
+    ORDER BY a.date ASC
 ");
 ?>
 
@@ -159,11 +166,39 @@ $dtrQuery = $mysql->query("
                 
                 <div class="card-header bg-dark text-white py-3 border-bottom-0 d-flex flex-column flex-md-row justify-content-between align-items-center">
                     <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;">
-                        <i class="fas fa-list-ul mr-2"></i> Daily Time Record (<?php echo date('F Y'); ?>)
+                        <i class="fas fa-list-ul mr-2"></i> Daily Time Record (<?php echo $displayMonthYear; ?>)
                     </h3>
-                    <div class="btn-group shadow-sm mt-3 mt-md-0">
-                        <a href="export_my_dtr_csv.php?month=<?php echo $currentMonth; ?>" class="btn btn-sm btn-light border-0" title="Export to CSV"><i class="fas fa-file-csv text-success mr-1"></i> CSV</a>
-                        <a href="export_my_dtr_pdf.php?month=<?php echo $currentMonth; ?>" target="_blank" class="btn btn-sm btn-light border-0 border-left" title="Export to PDF"><i class="fas fa-file-pdf text-danger mr-1"></i> PDF</a>
+                    
+                    <div class="d-flex align-items-center mt-3 mt-md-0">
+                        <form method="GET" class="d-flex mr-3">
+                            <select name="month" class="form-control form-control-sm mr-1 shadow-sm text-dark font-weight-bold" style="border-radius: 4px; min-width: 100px;">
+                                <?php 
+                                for($m=1; $m<=12; $m++) {
+                                    $mStr = str_pad($m, 2, '0', STR_PAD_LEFT);
+                                    $mName = date('M', mktime(0,0,0,$m,1));
+                                    $sel = ($mStr === $selectedMonth) ? 'selected' : '';
+                                    echo "<option value='$mStr' $sel>$mName</option>";
+                                }
+                                ?>
+                            </select>
+                            <select name="year" class="form-control form-control-sm mr-1 shadow-sm text-dark font-weight-bold" style="border-radius: 4px;">
+                                <?php 
+                                $currentY = date('Y');
+                                for($y=$currentY; $y>=$currentY-5; $y--) {
+                                    $sel = ($y == $selectedYear) ? 'selected' : '';
+                                    echo "<option value='$y' $sel>$y</option>";
+                                }
+                                ?>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-light font-weight-bold shadow-sm" style="border-radius: 4px;" title="Apply Filter">
+                                <i class="fas fa-filter text-dark"></i>
+                            </button>
+                        </form>
+                        
+                        <div class="btn-group shadow-sm">
+                            <a href="export_my_dtr_csv.php?month=<?php echo $filterDate; ?>" class="btn btn-sm btn-light border-0" title="Export to CSV"><i class="fas fa-file-csv text-success mr-1"></i> CSV</a>
+                            <a href="export_my_dtr_pdf.php?month=<?php echo $filterDate; ?>" target="_blank" class="btn btn-sm btn-light border-0 border-left" title="Export to PDF"><i class="fas fa-file-pdf text-danger mr-1"></i> PDF</a>
+                        </div>
                     </div>
                 </div>
                 
@@ -193,6 +228,12 @@ $dtrQuery = $mysql->query("
                                     
                                     if ($tIn !== '--:--' && $tOut !== '--:--') {
                                         $diff = strtotime($record['time_out']) - strtotime($record['time_in']);
+                                        
+                                        // PERFECT SYNC: Automatically deduct 1 hr lunch if shift is 5+ hours
+                                        if ($diff >= (5 * 3600)) {
+                                            $diff -= 3600; 
+                                        }
+                                        
                                         $total_calculated = round($diff / 3600, 2);
                                         if ($total_calculated > 8) {
                                             $regular_hours = 8.00;
@@ -241,7 +282,9 @@ $dtrQuery = $mysql->query("
                                     }
                                 ?>
                                 <tr>
-                                    <td class="font-weight-bold text-dark text-left align-middle pl-4"><?php echo date('D, M d, Y', strtotime($record['date'])); ?></td>
+                                    <td class="font-weight-bold text-dark text-left align-middle pl-4" data-sort="<?php echo $record['date']; ?>">
+                                        <?php echo date('D, M d, Y', strtotime($record['date'])); ?>
+                                    </td>
                                     <td class="text-primary font-weight-bold align-middle"><?php echo $tIn; ?></td>
                                     <td class="text-danger font-weight-bold align-middle"><?php echo $tOut; ?></td>
                                     <td class="font-weight-bold text-dark align-middle"><?php echo number_format($regular_hours, 2); ?>h</td>
@@ -280,8 +323,10 @@ $dtrQuery = $mysql->query("
 <script>
   $(document).ready(function () {
       $('#dtrTable').DataTable({ 
-          "responsive": true, "lengthChange": false, "pageLength": 10, 
-          "order": [[ 0, "desc" ]], 
+          "responsive": true, 
+          "lengthChange": false, 
+          "pageLength": 10, 
+          "order": [[ 0, "asc" ]], // NEW: ASCENDING SORT by default
           "language": { "search": "", "searchPlaceholder": "Search my records..." } 
       });
   });
