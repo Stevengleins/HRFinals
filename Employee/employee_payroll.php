@@ -180,17 +180,13 @@ $totalPagIBIG = $summary['total_pagibig'] ?? 0;
             <h6 class="font-weight-bold mb-3">Tax Summary</h6>
             <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
               <div class="d-flex justify-content-between mb-2">
-                <span>Withholding Tax (TRAIN):</span>
-                <strong class="text-danger">₱<?php echo number_format($totalWithholding, 2); ?></strong>
-              </div>
-              <div class="d-flex justify-content-between mb-2">
                 <span>Total Deductions:</span>
-                <strong class="text-danger">₱<?php echo number_format($totalMandatory + $totalWithholding, 2); ?></strong>
+                <strong class="text-danger">₱<?php echo number_format($totalMandatory, 2); ?></strong>
               </div>
               <hr>
               <div class="d-flex justify-content-between" style="font-size: 14px;">
                 <span>Deduction Rate:</span>
-                <strong><?php $rate = ($totalGrossSalary > 0) ? (($totalMandatory + $totalWithholding) / $totalGrossSalary * 100) : 0; echo number_format($rate, 2); ?>%</strong>
+                <strong><?php $rate = ($totalGrossSalary > 0) ? (($totalMandatory) / $totalGrossSalary * 100) : 0; echo number_format($rate, 2); ?>%</strong>
               </div>
             </div>
           </div>
@@ -214,7 +210,6 @@ $totalPagIBIG = $summary['total_pagibig'] ?? 0;
                 <th>Days Worked</th>
                 <th>Gross Salary</th>
                 <th>Mandatory Deductions</th>
-                <th>Withholding Tax</th>
                 <th>Net Salary</th>
                 <th>Status</th>
                 <th>Action</th>
@@ -228,7 +223,6 @@ $totalPagIBIG = $summary['total_pagibig'] ?? 0;
                     <td><?php echo (int)$row['days_worked']; ?></td>
                     <td>₱<?php echo number_format($row['gross_salary'], 2); ?></td>
                     <td>₱<?php echo number_format($row['total_mandatory_deductions'], 2); ?></td>
-                    <td>₱<?php echo number_format($row['withholding_tax'], 2); ?></td>
                     <td>₱<?php echo number_format($row['net_salary'], 2); ?></td>
                     <td>
                       <?php if ($row['status'] === 'Released'): ?>
@@ -263,13 +257,13 @@ $totalPagIBIG = $summary['total_pagibig'] ?? 0;
                 <?php endwhile; ?>
               <?php else: ?>
                 <tr>
-                  <td colspan="8" class="text-center py-4 text-muted">No payroll records found.</td>
+                  <td colspan="7" class="text-center py-4 text-muted">No payroll records found.</td>
                 </tr>
               <?php endif; ?>
             </tbody>
             <tfoot class="bg-light">
               <tr>
-                <th colspan="5" class="text-right">Total Net Salary</th>
+                <th colspan="4" class="text-right">Total Net Salary</th>
                 <th colspan="3" class="text-left">₱<?php echo number_format($totalNetSalary, 2); ?></th>
               </tr>
             </tfoot>
