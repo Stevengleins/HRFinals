@@ -95,27 +95,64 @@ if ($type === 'users') {
     $reportData .= "</tbody></table>";
 
 // ==========================================
-// 3. PAYROLL EXPORT
+// 3. PAYROLL EXPORT (Master or Single Employee)
 // ==========================================
 } elseif ($type === 'payroll') {
-    $title = "Master_Payroll_Expenses_" . date('Y_m_d');
-    $displayTitle = "Master Payroll Expenses Report";
-    $query = $mysql->query("SELECT u.first_name, u.last_name, p.payroll_period, p.net_salary, p.status FROM payroll p JOIN user u ON p.user_id = u.user_id ORDER BY p.payroll_id DESC");
-    
-    $reportData .= "<table><thead><tr><th>Employee Name</th><th>Payroll Period</th><th>Net Salary</th><th>Status</th></tr></thead><tbody>";
-    if($query->num_rows > 0) {
-        while($row = $query->fetch_assoc()) {
-            $reportData .= "<tr>
-                <td style='font-weight: bold;'>{$row['first_name']} {$row['last_name']}</td>
-                <td>{$row['payroll_period']}</td>
-                <td>₱ " . number_format($row['net_salary'], 2) . "</td>
-                <td><b>{$row['status']}</b></td>
-            </tr>";
+    $userId = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
+
+    if ($userId) {
+        // SINGLE EMPLOYEE DETAIL EXPORT
+        $uQuery = $mysql->query("SELECT first_name, last_name FROM user WHERE user_id = $userId");
+        $user = $uQuery->fetch_assoc();
+        $empName = htmlspecialchars($user['first_name'] . ' ' . $user['last_name']);
+        
+        $title = "Payroll_History_" . str_replace(' ', '_', $empName) . "_" . date('Y_m_d');
+        $displayTitle = "Payroll History: " . $empName;
+        
+        $query = $mysql->query("SELECT payroll_period, days_worked, gross_salary, total_mandatory_deductions, deductions, net_salary, status FROM payroll WHERE user_id = $userId ORDER BY payroll_id DESC");
+        
+        $reportData .= "<table><thead><tr><th>Payroll Period</th><th>Days Worked</th><th>Gross Salary</th><th>Mandatory Deductions</th><th>Other Deductions</th><th>Net Salary</th><th>Status</th></tr></thead><tbody>";
+        
+        if($query->num_rows > 0) {
+            while($row = $query->fetch_assoc()) {
+                $reportData .= "<tr>
+                    <td style='font-weight: bold;'>{$row['payroll_period']}</td>
+                    <td>{$row['days_worked']}</td>
+                    <td>₱ " . number_format($row['gross_salary'], 2) . "</td>
+                    <td>₱ " . number_format($row['total_mandatory_deductions'], 2) . "</td>
+                    <td>₱ " . number_format($row['deductions'], 2) . "</td>
+                    <td style='font-weight: bold; color: #27ae60;'>₱ " . number_format($row['net_salary'], 2) . "</td>
+                    <td><b>{$row['status']}</b></td>
+                </tr>";
+            }
+        } else {
+            $reportData .= "<tr><td colspan='7' style='text-align:center; color: #7f8c8d;'>No payroll data available for this employee.</td></tr>";
         }
+        $reportData .= "</tbody></table>";
+
     } else {
-        $reportData .= "<tr><td colspan='4' style='text-align:center; color: #7f8c8d;'>No payroll data available.</td></tr>";
+        // MASTER PAYROLL ROSTER EXPORT
+        $title = "Master_Payroll_Expenses_" . date('Y_m_d');
+        $displayTitle = "Master Payroll Expenses Report";
+        
+        $query = $mysql->query("SELECT u.first_name, u.last_name, p.payroll_period, p.net_salary, p.status FROM payroll p JOIN user u ON p.user_id = u.user_id ORDER BY p.payroll_id DESC");
+        
+        $reportData .= "<table><thead><tr><th>Employee Name</th><th>Payroll Period</th><th>Net Salary</th><th>Status</th></tr></thead><tbody>";
+        
+        if($query->num_rows > 0) {
+            while($row = $query->fetch_assoc()) {
+                $reportData .= "<tr>
+                    <td style='font-weight: bold;'>{$row['first_name']} {$row['last_name']}</td>
+                    <td>{$row['payroll_period']}</td>
+                    <td style='font-weight: bold; color: #27ae60;'>₱ " . number_format($row['net_salary'], 2) . "</td>
+                    <td><b>{$row['status']}</b></td>
+                </tr>";
+            }
+        } else {
+            $reportData .= "<tr><td colspan='4' style='text-align:center; color: #7f8c8d;'>No payroll data available.</td></tr>";
+        }
+        $reportData .= "</tbody></table>";
     }
-    $reportData .= "</tbody></table>";
 
 // ==========================================
 // 4. LEAVES EXPORT
@@ -396,7 +433,7 @@ if ($type === 'users') {
         <div class="header">
             <div class="header-left">
                 <div class="brand-container">
-                    <img src="../logo.png" alt="WORKFORCEPRO" class="brand-image" />
+                    <img src="../logo.png" alt="WORKFORCEPRO" class="brand-image" onerror="this.style.display='none'" />
                     <h1>WORKFORCEPRO</h1>
                 </div>
                 <p><?php echo $displayTitle; ?></p>

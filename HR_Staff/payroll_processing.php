@@ -9,85 +9,284 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'HR Staff') {
     exit();
 }
 
-$title = "Payroll Processing | WorkForcePro";
-include '../includes/hr_header.php';
-
 $processor = new PayrollProcessor($mysql);
 $message = '';
 $messageType = '';
 
-// Handle form submission
+// =========================================================================
+// AJAX & POST HANDLER FOR PAYROLL CALCULATION
+// =========================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     try {
-        if ($_POST['action'] === 'process_payroll') {
+        if ($_POST['action'] === 'preview_payroll' || $_POST['action'] === 'process_payroll_confirmed') {
+            
             $userId = (int)$_POST['employee_id'];
             $grossSalary = (float)$_POST['gross_salary'];
-            $startDate = $_POST['start_date'];
-            $endDate = $_POST['end_date'];
-            $payPeriod = $_POST['pay_period'] ?? 'semi-monthly';
+            $payrollMonth = $_POST['payroll_month']; 
+            $payrollHalf = $_POST['payroll_half'];   
             $processedBy = $_SESSION['user_id'] ?? null;
 
-            // Validate dates
-            if (strtotime($startDate) >= strtotime($endDate)) {
-                throw new Exception("End date must be after start date");
+            if (empty($payrollMonth)) throw new Exception("Please select a valid Payroll Month.");
+            
+            if ($payrollHalf === '1') {
+                $startDate = $payrollMonth . '-01';
+                $endDate = $payrollMonth . '-15';
+            } else {
+                $startDate = $payrollMonth . '-16';
+                $endDate = date('Y-m-t', strtotime($startDate)); 
             }
 
-            // Calculate payroll
-            $summary = $processor->calculateEmployeePayroll(
-                $userId,
-                $grossSalary,
-                $startDate,
-                $endDate,
-                $payPeriod
-            );
+            $periodString = "$startDate to $endDate";
 
-            // Save to database
-            $payrollId = $processor->savePayrollRecord(
-                $userId,
-                $startDate,
-                $endDate,
-                $summary,
-                'Pending',
-                $processedBy
-            );
+            // 1. STRICT DUPLICATE PAYROLL PROTECTION
+            $checkDuplicate = $mysql->query("SELECT payroll_id FROM payroll WHERE user_id = $userId AND payroll_period = '$periodString'");
+            if ($checkDuplicate && $checkDuplicate->num_rows > 0) {
+                $fmtStart = date('M d, Y', strtotime($startDate));
+                $fmtEnd = date('M d, Y', strtotime($endDate));
+                throw new Exception("<strong>Duplicate Blocked:</strong> Payroll for this employee from $fmtStart to $fmtEnd has <b>already been processed</b>. You cannot process the same period twice.");
+            }
 
-            $message = "Payroll processed successfully! Payroll ID: #" . $payrollId;
-            $messageType = 'success';
+            $empQuery = $mysql->query("SELECT shift_start, shift_end FROM employee_details WHERE user_id = $userId");
+            $empDetails = $empQuery->fetch_assoc();
+            $shiftStart = $empDetails['shift_start'] ?? '08:00:00';
+            $shiftEnd = $empDetails['shift_end'] ?? '17:00:00';
 
-            // Store summary for display
-            $_SESSION['payroll_summary'] = $summary;
-            $_SESSION['payroll_id'] = $payrollId;
+            // 2. FETCH PHYSICAL ATTENDANCE
+            $attQuery = $mysql->query("
+                SELECT date, time_in, time_out 
+                FROM attendance 
+                WHERE user_id = $userId 
+                AND date BETWEEN '$startDate' AND '$endDate' 
+                AND time_in IS NOT NULL
+            ");
+
+            $attendanceMap = [];
+            if ($attQuery && $attQuery->num_rows > 0) {
+                while ($att = $attQuery->fetch_assoc()) {
+                    if (!empty($att['time_out'])) { 
+                        $attendanceMap[$att['date']] = $att;
+                    }
+                }
+            }
+
+            // 3. FETCH APPROVED PAID LEAVES
+            $leaveQuery = $mysql->query("
+                SELECT leave_type, start_date, end_date 
+                FROM leave_requests 
+                WHERE user_id = $userId 
+                AND status = 'Approved'
+                AND start_date <= '$endDate' 
+                AND end_date >= '$startDate'
+            ");
+
+            $approvedLeaves = [];
+            if ($leaveQuery && $leaveQuery->num_rows > 0) {
+                while ($l = $leaveQuery->fetch_assoc()) {
+                    $approvedLeaves[] = $l;
+                }
+            }
+
+            $daysPresent = 0;
+            $daysOnPaidLeave = 0;
+            $totalOtHours = 0;
+            $totalLateMins = 0;
+            $totalUtMins = 0;
+            $regularHours = 0;
+            $expectedDays = 0;
+
+            $currentTs = strtotime($startDate);
+            $endTs = strtotime($endDate);
+
+            // 4. SCAN EVERY WEEKDAY IN THE PERIOD
+            while ($currentTs <= $endTs) {
+                if (date('N', $currentTs) < 6) { // Weekdays only
+                    $expectedDays++;
+                    $dateStr = date('Y-m-d', $currentTs);
+
+                    if (isset($attendanceMap[$dateStr])) {
+                        $daysPresent++;
+                        $att = $attendanceMap[$dateStr];
+
+                        // FOOLPROOF TIME PARSING
+                        $tInStr = date('H:i:s', strtotime($att['time_in']));
+                        $tOutStr = date('H:i:s', strtotime($att['time_out']));
+                        
+                        $tIn = strtotime($dateStr . ' ' . $tInStr);
+                        if (strtotime($tOutStr) < strtotime($tInStr)) {
+                            $tOut = strtotime($dateStr . ' ' . $tOutStr . ' +1 day');
+                        } else {
+                            $tOut = strtotime($dateStr . ' ' . $tOutStr);
+                        }
+
+                        $sStart = strtotime($dateStr . ' ' . $shiftStart);
+                        if (strtotime($shiftEnd) <= strtotime($shiftStart)) {
+                            $sEnd = strtotime($dateStr . ' ' . $shiftEnd . ' +1 day');
+                        } else {
+                            $sEnd = strtotime($dateStr . ' ' . $shiftEnd);
+                        }
+
+                        // Lates & Undertimes
+                        if ($tIn > $sStart) {
+                            $totalLateMins += floor(($tIn - $sStart) / 60);
+                        }
+                        if ($tOut < $sEnd) {
+                            $totalUtMins += floor(($sEnd - $tOut) / 60);
+                        }
+
+                        // OVERTIME FIX: Deduct 1 hr lunch if worked more than 5 hours
+                        $workedSecs = $tOut - $tIn;
+                        if ($workedSecs >= (5 * 3600)) {
+                            $workedSecs -= 3600; // 1 hour unpaid break
+                        }
+                        
+                        $workedHours = round($workedSecs / 3600, 2);
+                        if ($workedHours > 8) {
+                            $regularHours += 8;
+                            $totalOtHours += ($workedHours - 8);
+                        } else {
+                            $regularHours += $workedHours;
+                        }
+                    } 
+                    else {
+                        // Check Paid Leaves
+                        $isPaidLeave = false;
+                        foreach ($approvedLeaves as $leave) {
+                            if ($leave['leave_type'] !== 'Unpaid Leave' && $leave['leave_type'] !== 'Unpaid Leave / LWOP') {
+                                if ($dateStr >= $leave['start_date'] && $dateStr <= $leave['end_date']) {
+                                    $isPaidLeave = true; break;
+                                }
+                            }
+                        }
+                        if ($isPaidLeave) $daysOnPaidLeave++;
+                    }
+                }
+                $currentTs = strtotime('+1 day', $currentTs);
+            }
+
+            if ($expectedDays == 0) $expectedDays = 1;
+
+            $totalCompensableDays = $daysPresent + $daysOnPaidLeave;
+            $daysAbsent = max(0, $expectedDays - $totalCompensableDays);
+
+            if ($totalCompensableDays === 0) {
+                $fmtStart = date('M d, Y', strtotime($startDate));
+                $fmtEnd = date('M d, Y', strtotime($endDate));
+                throw new Exception("<strong>Action Denied:</strong> This employee has 0 attendance and 0 approved paid leaves between $fmtStart and $fmtEnd.");
+            }
+            
+            // 5. MATHEMATICALLY FLAWLESS FINANCIAL FORMULAS
+            $dailyRate = round($grossSalary / $expectedDays, 2);
+            $hourlyRate = round($dailyRate / 8, 2);
+            $minuteRate = round($hourlyRate / 60, 2);
+
+            $actualGross = round($totalCompensableDays * $dailyRate, 2); 
+            $otPay = round($totalOtHours * ($hourlyRate * 1.25), 2);
+            
+            $adjustedGross = $actualGross + $otPay; 
+
+            $lateDed = round($totalLateMins * $minuteRate, 2);
+            $utDed = round($totalUtMins * $minuteRate, 2);
+
+            $sss = ($actualGross > 0) ? round($actualGross * 0.045, 2) : 0;
+            $philhealth = ($actualGross > 0) ? round($actualGross * 0.025, 2) : 0;
+            $pagibig = ($actualGross > 0) ? 200.00 : 0;
+            $totalMandatory = $sss + $philhealth + $pagibig;
+
+            $taxableIncome = max(0, $adjustedGross - $lateDed - $utDed - $totalMandatory);
+            $tax = ($taxableIncome > 20833) ? round($taxableIncome * 0.10, 2) : 0; 
+
+            $totalDeductions = $totalMandatory + $tax + $lateDed + $utDed;
+            $netPay = max(0, $adjustedGross - $totalDeductions);
+
+            $summary = [
+                'gross_salary' => $actualGross,
+                'daily_rate' => $dailyRate,
+                'overtime_pay' => $otPay,
+                'undertime_deduction' => $utDed,
+                'late_deduction' => $lateDed,
+                'adjusted_gross_salary' => $adjustedGross,
+                'sss' => ['employee_share' => $sss, 'employer_share' => $sss * 2],
+                'philhealth' => ['employee_share' => $philhealth, 'employer_share' => $philhealth],
+                'pagibig' => ['employee_share' => $pagibig, 'employer_share' => $pagibig],
+                'total_mandatory_deductions' => $totalMandatory,
+                'taxable_income' => $taxableIncome,
+                'withholding_tax' => $tax,
+                'attendance' => [
+                    'regular_hours' => $regularHours,
+                    'approved_overtime_hours' => $totalOtHours,
+                    'days_present' => $daysPresent,
+                    'paid_leave_days' => $daysOnPaidLeave,
+                    'days_absent' => $daysAbsent
+                ],
+                'deductions' => 0, 
+                'total_deductions' => $totalDeductions,
+                'net_take_home_pay' => $netPay,
+                'employer_contributions' => ($sss * 2) + $philhealth + $pagibig
+            ];
+
+            // AJAX PREVIEW RESPONSE
+            if ($_POST['action'] === 'preview_payroll') {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'status' => 'success', 
+                    'data' => $summary, 
+                    'fmt_period' => date('M d, Y', strtotime($startDate)) . ' - ' . date('M d, Y', strtotime($endDate))
+                ]);
+                exit();
+            }
+
+            // ACTUAL DB SAVE RESPONSE
+            if ($_POST['action'] === 'process_payroll_confirmed') {
+                $payrollId = $processor->savePayrollRecord($userId, $startDate, $endDate, $summary, 'Pending', $processedBy);
+                $message = "Payroll processed successfully! Ref ID: #" . $payrollId;
+                $messageType = 'success';
+            }
+
         }
     } catch (Exception $e) {
-        $message = "Error: " . $e->getMessage();
+        if (isset($_POST['action']) && $_POST['action'] === 'preview_payroll') {
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            exit();
+        }
+        $message = $e->getMessage();
         $messageType = 'error';
     }
 }
 
-// Get all employees
-$employeesQuery = $mysql->query("
-    SELECT user_id, first_name, last_name
-    FROM user
-    WHERE role = 'Employee'
-    ORDER BY first_name ASC
-");
+$title = "Payroll Processing | WorkForcePro";
+include '../includes/hr_header.php';
 
-// Get recent payroll records
+$employeesQuery = $mysql->query("SELECT user_id, first_name, last_name FROM user WHERE role = 'Employee' ORDER BY first_name ASC");
+
+// FIX: Select ALL columns to ensure Deductions and Overtime load perfectly
 $recentPayrollQuery = $mysql->query("
-    SELECT p.payroll_id, p.user_id, p.payroll_period, p.gross_salary, 
-           p.net_salary, p.status, p.date_created, u.first_name, u.last_name
+    SELECT p.*, u.first_name, u.last_name
     FROM payroll p
     JOIN user u ON p.user_id = u.user_id
     ORDER BY p.date_created DESC
-    LIMIT 10
+    LIMIT 100
 ");
 ?>
 
-<div class="content-header">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
+
+<style>
+    .table-custom thead th { background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; border-top: none; color: #495057; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px; }
+    .table-custom td { vertical-align: middle !important; border-top: 1px solid #e9ecef; font-size: 0.95rem; }
+    .text-success-custom { color: #28a745 !important; font-weight: bold; }
+    .text-danger-custom { color: #dc3545 !important; font-weight: bold; }
+    .popup-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+    .popup-table th, .popup-table td { border-bottom: 1px solid #eee; padding: 10px 5px; }
+    .popup-table th { color: #fff; font-weight: normal; background-color: #555; text-transform: uppercase; font-size: 12px; }
+</style>
+
+<div class="content-header pb-2">
   <div class="container-fluid">
-    <div class="row mb-2">
+    <div class="row mb-2 align-items-center">
       <div class="col-sm-6">
-        <h1 class="m-0 text-dark font-weight-bold">Payroll Processing</h1>
+        <h1 class="m-0 text-dark font-weight-bold" style="font-size: 1.5rem;">Payroll Processing</h1>
       </div>
     </div>
   </div>
@@ -96,284 +295,381 @@ $recentPayrollQuery = $mysql->query("
 <section class="content">
   <div class="container-fluid">
 
-    <!-- Status Messages -->
     <?php if ($message): ?>
-      <div class="alert alert-<?php echo $messageType === 'success' ? 'success' : 'danger'; ?> alert-dismissible fade show" role="alert">
-        <i class="fas fa-<?php echo $messageType === 'success' ? 'check-circle' : 'exclamation-circle'; ?> mr-2"></i>
-        <?php echo $message; ?>
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
+      <div class="alert alert-<?php echo $messageType === 'success' ? 'success' : 'danger'; ?> alert-dismissible fade show shadow-sm" role="alert" style="border-left: 4px solid <?php echo $messageType === 'success' ? '#28a745' : '#dc3545'; ?>; background: #fff; color: #333;">
+        <i class="fas fa-<?php echo $messageType === 'success' ? 'check-circle text-success' : 'exclamation-circle text-danger'; ?> mr-2"></i>
+        <span><?php echo $message; ?></span>
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
       </div>
     <?php endif; ?>
 
-    <!-- Payroll Calculation Form -->
-    <div class="card shadow-sm border-0" style="border-radius: 8px; overflow: hidden;">
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 8px; overflow: hidden;">
       <div class="card-header bg-dark text-white py-3 border-bottom-0">
-        <h3 class="card-title m-0 font-weight-bold"><i class="fas fa-calculator mr-2"></i> Calculate Employee Payroll</h3>
+        <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;"><i class="fas fa-calculator mr-2"></i> Calculate Employee Payroll</h3>
       </div>
-      <div class="card-body">
-        <form method="POST" action="">
-          <input type="hidden" name="action" value="process_payroll">
+      <div class="card-body bg-light">
+        
+        <form method="POST" action="" id="payrollForm" class="needs-validation" novalidate>
+          <input type="hidden" name="action" value="preview_payroll">
 
           <div class="row">
-            <div class="col-md-6">
-              <div class="form-group">
-                <label for="employee_id" class="font-weight-bold">Select Employee</label>
-                <select name="employee_id" id="employee_id" class="form-control" required>
-                  <option value="">-- Choose an Employee --</option>
-                  <?php if ($employeesQuery && $employeesQuery->num_rows > 0): ?>
-                    <?php while ($emp = $employeesQuery->fetch_assoc()): ?>
-                      <option value="<?php echo $emp['user_id']; ?>">
-                        <?php echo htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']); ?>
-                      </option>
-                    <?php endwhile; ?>
-                  <?php endif; ?>
-                </select>
-              </div>
+            <div class="col-md-4 form-group">
+              <label for="employee_id" class="font-weight-bold text-dark">Select Employee <span class="text-danger">*</span></label>
+              <select name="employee_id" id="employee_id" class="form-control shadow-sm" required>
+                <option value="" disabled selected>-- Choose an Employee --</option>
+                <?php if ($employeesQuery && $employeesQuery->num_rows > 0): ?>
+                  <?php while ($emp = $employeesQuery->fetch_assoc()): ?>
+                    <option value="<?php echo $emp['user_id']; ?>">
+                      <?php echo htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']); ?>
+                    </option>
+                  <?php endwhile; ?>
+                <?php endif; ?>
+              </select>
+              <div class="invalid-feedback">Please select an employee.</div>
             </div>
 
-            <div class="col-md-6">
-              <div class="form-group">
-                <label for="pay_period" class="font-weight-bold">Pay Period Type</label>
-                <select name="pay_period" id="pay_period" class="form-control" required>
-                  <option value="monthly">Monthly</option>
-                  <option value="semi-monthly" selected>Semi-Monthly</option>
-                  <option value="daily">Daily</option>
-                </select>
-              </div>
+            <div class="col-md-4 form-group">
+              <label for="gross_salary" class="font-weight-bold text-dark">Gross Salary Base (₱) <span class="text-danger">*</span></label>
+              <input type="number" name="gross_salary" id="gross_salary" class="form-control shadow-sm" step="0.01" min="1" placeholder="e.g. 15000" required>
+              <div class="invalid-feedback">Valid gross base is required.</div>
+              <small class="form-text text-muted">The foundational salary before attendance formulas.</small>
+            </div>
+
+            <div class="col-md-2 form-group">
+              <label for="payroll_month" class="font-weight-bold text-dark">Payroll Month <span class="text-danger">*</span></label>
+              <input type="month" name="payroll_month" id="payroll_month" class="form-control shadow-sm" value="<?php echo date('Y-m'); ?>" required>
+              <div class="invalid-feedback">Select a month.</div>
+            </div>
+
+            <div class="col-md-2 form-group">
+              <label for="payroll_half" class="font-weight-bold text-dark">Payroll Period <span class="text-danger">*</span></label>
+              <select name="payroll_half" id="payroll_half" class="form-control shadow-sm" required>
+                <option value="1">1st Half (1st-15th)</option>
+                <option value="2">2nd Half (16th-End)</option>
+              </select>
+              <div class="invalid-feedback">Select a period.</div>
             </div>
           </div>
 
-          <div class="row">
-            <div class="col-md-6">
-              <div class="form-group">
-                <label for="gross_salary" class="font-weight-bold">Gross Salary (₱)</label>
-                <input type="number" name="gross_salary" id="gross_salary" class="form-control" 
-                       step="0.01" min="0" placeholder="Enter gross salary" required>
-                <small class="form-text text-muted">Employee's base salary for this period</small>
-              </div>
-            </div>
+          <hr class="mt-2 mb-4" style="opacity: 0.1;">
 
-            <div class="col-md-3">
-              <div class="form-group">
-                <label for="start_date" class="font-weight-bold">Start Date</label>
-                <input type="date" name="start_date" id="start_date" class="form-control" required>
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="form-group">
-                <label for="end_date" class="font-weight-bold">End Date</label>
-                <input type="date" name="end_date" id="end_date" class="form-control" required>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <button type="submit" class="btn btn-primary btn-lg">
-              <i class="fas fa-play mr-2"></i> Calculate & Process Payroll
+          <div class="form-group mb-0 text-right">
+            <button type="reset" class="btn btn-outline-secondary font-weight-bold px-4 mr-2" style="border-radius: 4px;">
+              <i class="fas fa-redo mr-1"></i> Reset
             </button>
-            <button type="reset" class="btn btn-secondary btn-lg">
-              <i class="fas fa-redo mr-2"></i> Clear Form
+            <button type="submit" class="btn btn-dark font-weight-bold px-4 shadow-sm" style="border-radius: 4px;">
+              <i class="fas fa-search mr-1"></i> Scan & Preview Calculation
             </button>
           </div>
         </form>
+
       </div>
     </div>
 
-    <!-- Payroll Summary Preview -->
-    <?php if (isset($_SESSION['payroll_summary'])): 
-        $summary = $_SESSION['payroll_summary'];
-        $payrollId = $_SESSION['payroll_id'] ?? 0;
-        $formatter = new PayrollCalculator();
-    ?>
-      <div class="card shadow-sm border-0 mt-4" style="border-radius: 8px; overflow: hidden;">
-        <div class="card-header bg-success text-white py-3 border-bottom-0">
-          <h3 class="card-title m-0 font-weight-bold"><i class="fas fa-receipt mr-2"></i> Payroll Summary #<?php echo $payrollId; ?></h3>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <!-- Gross Compensation -->
-            <div class="col-md-6">
-              <h5 class="font-weight-bold mb-3"><i class="fas fa-dollar-sign text-primary"></i> Gross Compensation</h5>
-              <table class="table table-sm table-borderless">
-                <tr>
-                  <td>Base Salary:</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['gross_salary'], 2); ?></td>
-                </tr>
-                <?php if ($summary['overtime_pay'] > 0): ?>
-                <tr class="table-success">
-                  <td><i class="fas fa-plus text-success"></i> Overtime Pay (1.25x):</td>
-                  <td class="text-right font-weight-bold text-success">+₱<?php echo number_format($summary['overtime_pay'], 2); ?></td>
-                </tr>
-                <?php endif; ?>
-                <?php if ($summary['undertime_deduction'] > 0): ?>
-                <tr class="table-danger">
-                  <td><i class="fas fa-minus text-danger"></i> Undertime Deduction:</td>
-                  <td class="text-right font-weight-bold text-danger">-₱<?php echo number_format($summary['undertime_deduction'], 2); ?></td>
-                </tr>
-                <?php endif; ?>
-                <?php if ($summary['late_deduction'] > 0): ?>
-                <tr class="table-danger">
-                  <td><i class="fas fa-minus text-danger"></i> Late Deduction:</td>
-                  <td class="text-right font-weight-bold text-danger">-₱<?php echo number_format($summary['late_deduction'], 2); ?></td>
-                </tr>
-                <?php endif; ?>
-                <tr class="border-top">
-                  <td class="font-weight-bold">Adjusted Gross:</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['adjusted_gross_salary'], 2); ?></td>
-                </tr>
-              </table>
-            </div>
-
-            <!-- Mandatory Deductions -->
-            <div class="col-md-6">
-              <h5 class="font-weight-bold mb-3"><i class="fas fa-hand-holding-heart text-info"></i> Mandatory Deductions</h5>
-              <table class="table table-sm table-borderless">
-                <tr>
-                  <td>SSS (Employee 4.5%):</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['sss']['employee_share'], 2); ?></td>
-                </tr>
-                <tr>
-                  <td>PhilHealth (Employee 2.5%):</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['philhealth']['employee_share'], 2); ?></td>
-                </tr>
-                <tr>
-                  <td>Pag-IBIG (Employee Fixed ₱200):</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['pagibig']['employee_share'], 2); ?></td>
-                </tr>
-                <tr class="border-top">
-                  <td class="font-weight-bold">Total Mandatory:</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['total_mandatory_deductions'], 2); ?></td>
-                </tr>
-              </table>
-            </div>
-          </div>
-
-          <hr>
-
-          <div class="row">
-            <!-- Taxable Income & Withholding Tax -->
-            <div class="col-md-6">
-              <h5 class="font-weight-bold mb-3"><i class="fas fa-chart-line text-warning"></i> Tax Computation</h5>
-              <table class="table table-sm table-borderless">
-                <tr>
-                  <td>Taxable Income:</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['taxable_income'], 2); ?></td>
-                </tr>
-                <tr>
-                  <td>Withholding Tax (TRAIN):</td>
-                  <td class="text-right font-weight-bold text-danger">₱<?php echo number_format($summary['withholding_tax'], 2); ?></td>
-                </tr>
-              </table>
-            </div>
-
-            <!-- Attendance Summary -->
-            <div class="col-md-6">
-              <h5 class="font-weight-bold mb-3"><i class="fas fa-calendar-check text-info"></i> Attendance</h5>
-              <table class="table table-sm table-borderless">
-                <tr>
-                  <td>Regular Hours:</td>
-                  <td class="text-right"><?php echo $summary['attendance']['regular_hours']; ?> hrs</td>
-                </tr>
-                <tr>
-                  <td>Approved Overtime:</td>
-                  <td class="text-right text-success"><?php echo $summary['attendance']['approved_overtime_hours']; ?> hrs</td>
-                </tr>
-                <tr>
-                  <td>Days Present:</td>
-                  <td class="text-right"><?php echo $summary['attendance']['days_present']; ?></td>
-                </tr>
-                <tr>
-                  <td>Days Absent:</td>
-                  <td class="text-right text-danger"><?php echo $summary['attendance']['days_absent']; ?></td>
-                </tr>
-              </table>
-            </div>
-          </div>
-
-          <hr>
-
-          <!-- Final Summary -->
-          <div class="row">
-            <div class="col-md-12">
-              <table class="table table-sm table-borderless" style="font-size: 1.1rem;">
-                <tr class="border-top border-bottom" style="background-color: #f8f9fa;">
-                  <td class="font-weight-bold">Total Deductions:</td>
-                  <td class="text-right font-weight-bold">₱<?php echo number_format($summary['total_deductions'], 2); ?></td>
-                </tr>
-                <tr style="background-color: #e8f5e9; font-size: 1.25rem;">
-                  <td class="font-weight-bold"><i class="fas fa-hand-holding-usd text-success"></i> NET TAKE-HOME PAY:</td>
-                  <td class="text-right font-weight-bold text-success">₱<?php echo number_format($summary['net_take_home_pay'], 2); ?></td>
-                </tr>
-                <tr>
-                  <td colspan="2" class="text-muted text-center small">
-                    <i class="fas fa-info-circle"></i> For reference only. Employer contributions: ₱<?php echo number_format($summary['employer_contributions'], 2); ?>
-                  </td>
-                </tr>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="card-footer bg-light py-3">
-          <a href="payrollhr.php" class="btn btn-secondary">
-            <i class="fas fa-arrow-left mr-2"></i> Back to Payroll List
-          </a>
-          <a href="export_leaves_csv.php?payroll_id=<?php echo $payrollId; ?>" class="btn btn-success" title="Export payroll details">
-            <i class="fas fa-download mr-2"></i> Export Details
-          </a>
-        </div>
-      </div>
-
-      <?php unset($_SESSION['payroll_summary'], $_SESSION['payroll_id']); endif; ?>
-
-    <!-- Recent Payroll Records -->
-    <div class="card shadow-sm border-0 mt-4" style="border-radius: 8px; overflow: hidden;">
+    <div class="card shadow-sm border-0 mb-5" style="border-radius: 8px; overflow: hidden;">
       <div class="card-header bg-dark text-white py-3 border-bottom-0">
-        <h3 class="card-title m-0 font-weight-bold"><i class="fas fa-history mr-2"></i> Recent Payroll Records</h3>
+        <h3 class="card-title m-0 font-weight-bold" style="font-size: 1.1rem;"><i class="fas fa-history mr-2"></i> Recent Processing Log</h3>
       </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover table-striped m-0 text-center align-middle">
-            <thead class="bg-light">
+      <div class="card-body p-0 bg-white">
+        <div class="table-responsive p-3">
+          <table id="recentTable" class="table table-hover table-custom w-100 text-center align-middle">
+            <thead>
               <tr>
-                <th>Payroll ID</th>
-                <th>Employee</th>
+                <th class="text-left">Employee Name</th>
                 <th>Payroll Period</th>
-                <th>Gross Salary</th>
+                <th>Total Earnings</th>
+                <th>Total Deductions</th>
                 <th>Net Salary</th>
                 <th>Status</th>
-                <th>Date Created</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               <?php if ($recentPayrollQuery && $recentPayrollQuery->num_rows > 0): ?>
-                <?php while ($row = $recentPayrollQuery->fetch_assoc()): ?>
+                <?php while ($row = $recentPayrollQuery->fetch_assoc()): 
+                    $raw_period = $row['payroll_period'];
+                    $p_parts = explode(' to ', $raw_period);
+                    $fmt_period = (count($p_parts) === 2) 
+                        ? date('M d, Y', strtotime($p_parts[0])) . ' - ' . date('M d, Y', strtotime($p_parts[1])) 
+                        : htmlspecialchars($raw_period);
+                    
+                    // FLAWLESS TABLE MATH: Earnings - Net Salary = Deductions
+                    $total_earnings = $row['gross_salary'] + $row['overtime_pay'];
+                    $net_salary = $row['net_salary'];
+                    $total_deductions = max(0, $total_earnings - $net_salary);
+                ?>
                   <tr>
-                    <td class="font-weight-bold">#<?php echo $row['payroll_id']; ?></td>
-                    <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                    <td><?php echo htmlspecialchars($row['payroll_period']); ?></td>
-                    <td>₱<?php echo number_format($row['gross_salary'], 2); ?></td>
-                    <td class="text-success font-weight-bold">₱<?php echo number_format($row['net_salary'], 2); ?></td>
+                    <td class="font-weight-bold text-dark text-left"><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
+                    <td><?php echo $fmt_period; ?></td>
+                    <td class="text-success-custom">₱<?php echo number_format($total_earnings, 2); ?></td>
+                    <td class="text-danger-custom">- ₱<?php echo number_format($total_deductions, 2); ?></td>
+                    <td class="text-success-custom" style="font-size: 1.05rem;">₱<?php echo number_format($net_salary, 2); ?></td>
                     <td>
-                      <span class="badge badge-<?php echo $row['status'] === 'Released' ? 'success' : 'warning'; ?>">
-                        <?php echo $row['status']; ?>
-                      </span>
+                      <?php if ($row['status'] === 'Released'): ?>
+                        <span class="badge badge-success px-2 py-1"><i class="fas fa-check mr-1"></i> Released</span>
+                      <?php else: ?>
+                        <span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-clock mr-1"></i> Pending</span>
+                      <?php endif; ?>
                     </td>
-                    <td><?php echo date('M d, Y', strtotime($row['date_created'])); ?></td>
+                    <td>
+                      <button class="btn btn-sm btn-outline-dark font-weight-bold shadow-sm w-100"
+                          onclick="viewPayslip(
+                            <?php echo (int)$row['payroll_id']; ?>,
+                            '<?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name'], ENT_QUOTES); ?>',
+                            '<?php echo htmlspecialchars($fmt_period, ENT_QUOTES); ?>',
+                            '<?php echo date('M d, Y', strtotime($row['date_created'])); ?>',
+                            '<?php echo (int)$row['days_worked']; ?>',
+                            '<?php echo number_format($row['gross_salary'], 2); ?>',
+                            '<?php echo number_format($row['sss_employee_share'], 2); ?>',
+                            '<?php echo number_format($row['philhealth_employee_share'], 2); ?>',
+                            '<?php echo number_format($row['pagibig_employee_share'], 2); ?>',
+                            '<?php echo number_format($row['overtime_pay'], 2); ?>',
+                            '<?php echo number_format($row['undertime_deduction'] + $row['late_deduction'], 2); ?>',
+                            '<?php echo number_format($row['withholding_tax'] ?? 0, 2); ?>',
+                            '<?php echo number_format($row['deductions'], 2); ?>',
+                            '<?php echo number_format($net_salary, 2); ?>',
+                            '<?php echo number_format($total_earnings, 2); ?>',
+                            '<?php echo number_format($total_deductions, 2); ?>',
+                            '<?php echo htmlspecialchars($row['status'], ENT_QUOTES); ?>'
+                          )">
+                          <i class="fas fa-eye mr-1"></i> View
+                      </button>
+                    </td>
                   </tr>
                 <?php endwhile; ?>
-              <?php else: ?>
-                <tr><td colspan="8" class="text-center py-4 text-muted">No payroll records found.</td></tr>
               <?php endif; ?>
             </tbody>
           </table>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
 <?php include '../includes/footer.php'; ?>
+
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  $(document).ready(function () {
+      $('#recentTable').DataTable({
+          "responsive": true, 
+          "lengthChange": true, 
+          "autoWidth": false,
+          "searching": true,
+          "ordering": true,
+          "pageLength": 10,
+          "order": [[ 5, "desc" ]], // Order by Date Processed
+          "language": { "search": "_INPUT_", "searchPlaceholder": "Search records..." }
+      });
+
+      // =========================================================
+      // DOUBLE SWAL CONFIRMATION & SECURE MATH PREVIEW
+      // =========================================================
+      $('#payrollForm').on('submit', function(e) {
+          e.preventDefault();
+          const form = this;
+
+          if (!form.checkValidity()) {
+              e.stopPropagation();
+              form.classList.add('was-validated');
+              return;
+          }
+          
+          Swal.fire({
+              title: 'Scan & Calculate?',
+              text: 'The system will now scan the attendance logs and calculate deductions.',
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonColor: '#212529',
+              cancelButtonColor: '#6c757d',
+              confirmButtonText: '<i class="fas fa-search"></i> Yes, Scan it!'
+          }).then((result) => {
+              if (result.isConfirmed) {
+                  
+                  const btn = $(form).find('button[type="submit"]');
+                  btn.prop('disabled', true);
+                  let formData = new FormData(form);
+
+                  Swal.fire({
+                      title: 'Scanning Attendance...',
+                      text: 'Analyzing timecards and calculating deductions...',
+                      allowOutsideClick: false,
+                      didOpen: () => { Swal.showLoading(); }
+                  });
+
+                  fetch('payroll_processing.php', {
+                      method: 'POST',
+                      body: formData
+                  })
+                  .then(res => res.json())
+                  .then(data => {
+                      btn.prop('disabled', false);
+
+                      if (data.status === 'error') {
+                          Swal.fire({ 
+                              icon: 'error', 
+                              title: 'Calculation Aborted', 
+                              html: data.message, 
+                              confirmButtonColor: '#212529' 
+                          });
+                      } else {
+                          let s = data.data; 
+                          const formatMoney = (num) => '₱' + parseFloat(num).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                          // STRICT FLOAT CONVERSION TO PREVENT STRING CONCATENATION BUG ("11"+"109"="11109")
+                          let timeDeductions = parseFloat(s.late_deduction) + parseFloat(s.undertime_deduction);
+                          let taxAndMandatory = parseFloat(s.total_mandatory_deductions) + parseFloat(s.withholding_tax);
+                          let totalDeds = parseFloat(s.total_deductions);
+
+                          let overviewHtml = `
+                              <div style="text-align: left; font-size: 14px;">
+                                  <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                      <span class="text-muted">Period:</span> <strong>${data.fmt_period}</strong>
+                                  </div>
+                                  
+                                  <table class="table table-sm table-borderless" style="margin-bottom:0;">
+                                      <tr><td class="text-muted">Base Gross Selected:</td><td class="text-right text-muted">${formatMoney(formData.get('gross_salary'))}</td></tr>
+                                      <tr><td>Days Present:</td><td class="text-right"><strong>${s.attendance.days_present}</strong></td></tr>
+                                      <tr><td>Paid Leaves:</td><td class="text-right text-success"><strong>+${s.attendance.paid_leave_days}</strong></td></tr>
+                                      <tr><td>Unpaid Absences:</td><td class="text-right text-danger"><strong>${s.attendance.days_absent}</strong></td></tr>
+                                      
+                                      <tr style="border-top:1px dashed #ccc;"><td class="pt-2"><b>Actual Basic Earned:</b></td><td class="text-right text-success pt-2"><b>${formatMoney(s.gross_salary)}</b></td></tr>
+                                      <tr><td>Overtime Pay:</td><td class="text-right text-success">+${formatMoney(s.overtime_pay)}</td></tr>
+                                      
+                                      <tr style="border-top:1px dashed #ccc;"><td class="pt-2 text-dark"><b>Total Earnings:</b></td><td class="text-right text-dark pt-2"><b>${formatMoney(s.adjusted_gross_salary)}</b></td></tr>
+                                      
+                                      <tr><td>Late/Undertime Ded:</td><td class="text-right text-danger">-${formatMoney(timeDeductions)}</td></tr>
+                                      <tr><td>Mandatory/Tax Ded:</td><td class="text-right text-danger">-${formatMoney(taxAndMandatory)}</td></tr>
+                                      
+                                      <tr style="border-top:1px dashed #ccc;"><td class="pt-2 text-danger"><b>Total Deductions:</b></td><td class="text-right text-danger pt-2"><b>-${formatMoney(totalDeds)}</b></td></tr>
+                                  </table>
+                                  
+                                  <div style="background: #212529; color: #fff; padding: 15px; border-radius: 4px; text-align: right; margin-top: 15px;">
+                                      <p style="margin:0; font-size:11px; text-transform:uppercase; opacity:0.8;">Final Net Take-Home Pay</p>
+                                      <h4 style="margin:0; font-size:24px; font-weight:bold;">${formatMoney(s.net_take_home_pay)}</h4>
+                                  </div>
+                              </div>
+                          `;
+
+                          Swal.fire({
+                              title: 'Payroll Overview',
+                              html: overviewHtml,
+                              icon: 'info',
+                              showCancelButton: true,
+                              confirmButtonColor: '#28a745',
+                              cancelButtonColor: '#6c757d',
+                              confirmButtonText: '<i class="fas fa-check-circle mr-1"></i> Confirm & Process',
+                              cancelButtonText: 'Cancel'
+                          }).then((result) => {
+                              if (result.isConfirmed) {
+                                  Swal.fire({
+                                      title: 'Saving Database Record...',
+                                      allowOutsideClick: false,
+                                      didOpen: () => { Swal.showLoading(); }
+                                  });
+                                  
+                                  let actionInput = form.querySelector('input[name="action"]');
+                                  actionInput.value = 'process_payroll_confirmed';
+                                  form.submit();
+                              }
+                          });
+                      }
+                  })
+                  .catch(err => {
+                      btn.prop('disabled', false);
+                      Swal.fire('Error', 'A server error occurred. Please check console logs.', 'error');
+                  });
+              }
+          });
+      });
+  });
+
+  // HR View Payslip Function (No Release Button)
+  function viewPayslip(payrollId, employeeName, period, dateGenerated, daysWorked, grossSalary, sss, philhealth, pagibig, overtime, lates, withholdingTax, deductions, netSalary, totalEarnings, totalDeductions, status) {
+      
+      let statusBadge = status === 'Released' 
+          ? `<span style="color: #28a745; font-weight: bold; border: 2px solid #28a745; padding: 2px 8px; border-radius: 4px; font-size: 12px; letter-spacing: 1px;">RELEASED</span>` 
+          : `<span style="color: #ffc107; font-weight: bold; border: 2px solid #ffc107; padding: 2px 8px; border-radius: 4px; font-size: 12px; letter-spacing: 1px;">PENDING</span>`;
+
+      Swal.fire({
+          title: `
+              <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 5px;">
+                  <img src="../logo.png" alt="WORKFORCEPRO" style="opacity: 1; max-height: 35px; border-radius: 4px; margin-right: 8px;">
+                  <h2 style="margin:0; font-size: 22px; color: #333;"><strong>WORK</strong><span style="font-weight: normal;">FORCEPRO</span></h2>
+              </div>
+              <p style="font-size: 14px; color: #666; margin: 5px 0 15px 0;">Statement of Earning & Deductions</p>
+          `,
+          html: `
+              <div style="text-align:left; font-family: Arial, sans-serif;">
+                  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px;">
+                      <div>
+                          <p style="margin:0; font-size: 15px;"><strong>${employeeName}</strong></p>
+                          <p style="margin:0; font-size: 13px; color: #555;">Period: ${period}</p>
+                      </div>
+                      <div style="text-align: right;">
+                          ${statusBadge}
+                          <p style="margin:5px 0 0 0; font-size: 11px; color: #888;">Date Logged: ${dateGenerated}</p>
+                      </div>
+                  </div>
+
+                  <table class="popup-table">
+                      <thead>
+                          <tr>
+                              <th style="border-right: 1px solid #777;">Gross Earnings</th>
+                              <th style="text-align: right;">Amount</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          <tr><td>Basic Pay (${daysWorked} Days)</td><td align="right" style="color: #28a745;">+ ₱${grossSalary}</td></tr>
+                          <tr><td>Overtime Pay</td><td align="right" style="color: #28a745;">+ ₱${overtime}</td></tr>
+                      </tbody>
+                  </table>
+
+                  <table class="popup-table" style="margin-top: 15px;">
+                      <thead>
+                          <tr>
+                              <th style="border-right: 1px solid #777;">Statutory Deductions</th>
+                              <th style="text-align: right;">Amount</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          <tr><td>FICA - SSS</td><td align="right" style="color: #dc3545;">- ₱${sss}</td></tr>
+                          <tr><td>FICA - PhilHealth</td><td align="right" style="color: #dc3545;">- ₱${philhealth}</td></tr>
+                          <tr><td>FICA - Pag-IBIG</td><td align="right" style="color: #dc3545;">- ₱${pagibig}</td></tr>
+                          <tr><td>Withholding Tax</td><td align="right" style="color: #dc3545;">- ₱${withholdingTax}</td></tr>
+                          <tr><td>Lates & Undertime</td><td align="right" style="color: #dc3545;">- ₱${lates}</td></tr>
+                          <tr><td>Other Deductions</td><td align="right" style="color: #dc3545;">- ₱${deductions}</td></tr>
+                      </tbody>
+                  </table>
+
+                  <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;">
+                      <tr style="border-top: 2px solid #333; background-color: #f8f9fa;">
+                          <td style="padding: 12px; border-right: 1px solid #ddd;">
+                              <strong>Total Earnings</strong><br>
+                              <span style="font-size: 16px;">₱${totalEarnings}</span>
+                          </td>
+                          <td style="padding: 12px; border-right: 1px solid #ddd;">
+                              <strong>Total Deductions</strong><br>
+                              <span style="font-size: 16px; color: #dc3545;">- ₱${totalDeductions}</span>
+                          </td>
+                          <td style="padding: 12px; text-align: right;">
+                              <strong>Net Pay</strong><br>
+                              <strong style="font-size: 20px; color: #28a745;">₱${netSalary}</strong>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+          `,
+          icon: null,
+          showConfirmButton: false,
+          showCloseButton: true,
+          width: '600px',
+          customClass: { popup: 'rounded-0' }
+      });
+  }
+</script>
