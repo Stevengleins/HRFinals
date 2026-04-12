@@ -94,7 +94,7 @@ $employeesQuery = $mysql->query("
                 <th class="text-left">Employee Name</th>
                 <th>Total Payroll Records</th>
                 <th>Total Lifetime Paid</th>
-                <th>Actions</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
