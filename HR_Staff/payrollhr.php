@@ -128,7 +128,7 @@ $totalPayrollAmount = $totalAmountQuery->fetch_assoc()['total_amount'] ?? 0;
                 <th>Net Salary</th>
                 <th>Date Logged</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
