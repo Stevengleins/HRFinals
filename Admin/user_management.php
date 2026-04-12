@@ -112,7 +112,7 @@ include('../includes/admin_header.php');
                   <th>Position</th>
                   <th>System Role</th>
                   <th>Email Address</th>    
-                  <th class="text-center">Actions</th>
+                  <th class="text-center">Details</th>
                 </tr>
               </thead>
               <tbody>
