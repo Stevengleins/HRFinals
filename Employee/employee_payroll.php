@@ -229,7 +229,7 @@ $totalOtherDeductions = $summary['total_other_deductions'] ?? 0;
                 <th>Total Deductions</th>
                 <th>Net Salary</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
