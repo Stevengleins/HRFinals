@@ -117,7 +117,7 @@ include('../includes/hr_header.php');
                                 <th>Duration</th>
                                 <th>Reason</th>
                                 <th>Date Filed</th>
-                                <th class="text-center">Action</th>
+                                <th class="text-center">Details</th>
                             </tr>
                         </thead>
                         <tbody>
