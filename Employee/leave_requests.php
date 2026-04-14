@@ -20,10 +20,11 @@ $employee = $result->fetch_assoc();
 $historyQuery = "SELECT * FROM leave_requests WHERE user_id = '$user_id' ORDER BY date_applied DESC";
 $historyResult = $mysql->query($historyQuery);
 
-// 2. CHECK FOR ACTIVE LEAVE LOCKOUT
-// Rule: Cannot apply if there is a Pending request OR an Approved request that hasn't finished yet.
+// 2. CHECK FOR ACTIVE LEAVE & COOLDOWN LOCKOUT
 date_default_timezone_set('Asia/Manila');
 $today = date('Y-m-d');
+
+// Rule A: Active Leave Lockout
 $activeQuery = "
     SELECT * FROM leave_requests 
     WHERE user_id = '$user_id' 
@@ -36,6 +37,41 @@ $activeQuery = "
 $activeResult = $mysql->query($activeQuery);
 $activeLeave = $activeResult->fetch_assoc();
 $hasActiveLeave = !empty($activeLeave);
+
+// Rule B: System Cooldown Lockout (Cannot file within 14 days of last application)
+$cooldownDays = 14; 
+$cooldownQuery = "SELECT date_applied FROM leave_requests WHERE user_id = '$user_id' ORDER BY date_applied DESC LIMIT 1";
+$cooldownResult = $mysql->query($cooldownQuery);
+$lastLeave = $cooldownResult->fetch_assoc();
+
+$inCooldown = false;
+$cooldownMessage = "";
+
+// STRICT FIX: Check if date_applied actually exists and is not a corrupted zero-date
+if (!empty($lastLeave) && !empty($lastLeave['date_applied']) && $lastLeave['date_applied'] !== '0000-00-00 00:00:00' && $lastLeave['date_applied'] !== '0000-00-00') {
+    try {
+        $lastApplied = new DateTime($lastLeave['date_applied']);
+        $now = new DateTime($today);
+        
+        if ($now >= $lastApplied) {
+            $diff = $now->diff($lastApplied)->days;
+            
+            if ($diff < $cooldownDays) {
+                $inCooldown = true;
+                $daysLeft = $cooldownDays - $diff;
+                
+                $unlockDate = clone $lastApplied;
+                $unlockDate->modify("+$cooldownDays days");
+                
+                $cooldownMessage = "System cooldown active. You recently filed a leave. Please wait " . $daysLeft . " more day(s). You can apply again on " . $unlockDate->format('M d, Y') . ".";
+            }
+        }
+    } catch (Exception $e) {
+        $inCooldown = false; // Failsafe if database date is completely broken
+    }
+}
+
+$isLocked = $hasActiveLeave || $inCooldown;
 
 // 3. CALCULATE USED LEAVES
 $usedLeaves = [];
@@ -52,15 +88,16 @@ if($balanceResult && $balanceResult->num_rows > 0) {
 }
 
 // 4. PHILIPPINE LEAVE LAW BALANCES
-$vl_left = max(0, 15 - ($usedLeaves['Vacation Leave'] ?? 0)); // Standard Corporate Practice
-$sl_left = max(0, 15 - ($usedLeaves['Sick Leave'] ?? 0)); // Standard Corporate Practice
-$mat_left = max(0, 105 - ($usedLeaves['Maternity Leave'] ?? 0)); // RA 11210
-$pat_left = max(0, 7 - ($usedLeaves['Paternity Leave'] ?? 0)); // RA 8187
-$solo_left = max(0, 7 - ($usedLeaves['Solo Parent Leave'] ?? 0)); // RA 8972
-$vawc_left = max(0, 10 - ($usedLeaves['VAWC Leave'] ?? 0)); // RA 9262
-$el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practice
+$vl_left = max(0, 15 - ($usedLeaves['Vacation Leave'] ?? 0)); 
+$sl_left = max(0, 15 - ($usedLeaves['Sick Leave'] ?? 0)); 
+$mat_left = max(0, 105 - ($usedLeaves['Maternity Leave'] ?? 0)); 
+$pat_left = max(0, 7 - ($usedLeaves['Paternity Leave'] ?? 0)); 
+$solo_left = max(0, 7 - ($usedLeaves['Solo Parent Leave'] ?? 0)); 
+$vawc_left = max(0, 10 - ($usedLeaves['VAWC Leave'] ?? 0)); 
+$el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); 
 ?>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 
@@ -73,7 +110,7 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
     .text-gray-300 { color: #dddfeb !important; }
     .text-xs { font-size: .7rem; }
     
-    /* Clean Table Styling with Light Categories */
+    /* Clean Table Styling */
     .table-custom thead th {
         background-color: #f8f9fa;
         border-bottom: 2px solid #dee2e6;
@@ -89,6 +126,45 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
         border-top: 1px solid #f1f3f5;
         font-size: 0.95rem;
         padding: 1rem 0.75rem;
+    }
+
+    /* Flatpickr Customizations */
+    .ph-holiday {
+        background-color: #ffe6e6 !important;
+        color: #e74a3b !important;
+        font-weight: bold;
+        border-color: #e74a3b !important;
+    }
+    
+    /* Current Day Highlights Blue */
+    .flatpickr-day.today {
+        background-color: #4e73df !important;
+        color: #ffffff !important;
+        border-color: #4e73df !important;
+        font-weight: bold;
+    }
+
+    /* Fix Visibility & Cross Out Past Disabled Days */
+    .flatpickr-day.flatpickr-disabled,
+    .flatpickr-day.flatpickr-disabled:hover {
+        color: #b7b9cc !important; 
+        text-decoration: line-through !important; 
+        background-color: transparent !important;
+        cursor: not-allowed !important;
+        opacity: 1 !important; 
+    }
+    
+    .flatpickr-calendar {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        border: none;
+        border-radius: 8px;
+    }
+    
+    .inline-validation {
+        font-size: 0.75rem;
+        margin-top: 4px;
+        display: block;
+        font-weight: 600;
     }
 </style>
 
@@ -164,7 +240,6 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
     </div>
 
     <div class="row mt-3">
-        
         <div class="col-md-4">
             <div class="card shadow-sm border-0 mb-4" style="border-radius: 8px; overflow: hidden;">
                 <div class="card-header bg-dark text-white py-3 border-bottom-0 d-flex justify-content-between align-items-center">
@@ -177,42 +252,48 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
                         <?php if($hasActiveLeave): ?>
                         <div class="alert alert-warning shadow-sm pb-3 pt-3 mb-4" style="border-left: 4px solid #f6c23e;">
                             <h6 class="font-weight-bold text-dark mb-1"><i class="fas fa-lock mr-2"></i> Form Locked</h6>
-                            <p class="mb-0 text-dark small">You have an active leave request (<strong><?php echo $activeLeave['status']; ?></strong>) scheduled until <strong><?php echo date('M d, Y', strtotime($activeLeave['end_date'])); ?></strong>. You cannot file a new request until this leave has finished.</p>
+                            <p class="mb-0 text-dark small">You have an active leave request (<strong><?php echo $activeLeave['status']; ?></strong>) scheduled until <strong><?php echo date('M d, Y', strtotime($activeLeave['end_date'])); ?></strong>.</p>
+                        </div>
+                        <?php elseif($inCooldown): ?>
+                        <div class="alert alert-danger shadow-sm pb-3 pt-3 mb-4" style="border-left: 4px solid #e74a3b;">
+                            <h6 class="font-weight-bold text-dark mb-1"><i class="fas fa-ban mr-2"></i> Cooldown Active</h6>
+                            <p class="mb-0 text-dark small"><?php echo $cooldownMessage; ?></p>
                         </div>
                         <?php endif; ?>
 
                         <div class="form-group">
                             <label class="text-muted text-xs font-weight-bold text-uppercase">Leave Type</label>
-                            <select class="form-control shadow-sm" id="leave_type" onchange="updateDateLimits()" required <?php echo $hasActiveLeave ? 'disabled' : ''; ?>>
+                            <select class="form-control shadow-sm" id="leave_type" required <?php echo $isLocked ? 'disabled' : ''; ?>>
                                 <option value="" disabled selected>Select leave classification...</option>
                                 <option value="Vacation Leave">Vacation Leave (VL)</option>
                                 <option value="Sick Leave">Sick Leave (SL)</option>
+                                <option value="Emergency Leave">Emergency Leave</option>
                                 <option value="Maternity Leave">Maternity Leave (RA 11210)</option>
                                 <option value="Paternity Leave">Paternity Leave (RA 8187)</option>
                                 <option value="Solo Parent Leave">Solo Parent Leave (RA 8972)</option>
                                 <option value="VAWC Leave">VAWC Leave (RA 9262)</option>
-                                <option value="Emergency Leave">Emergency Leave</option>
                                 <option value="Unpaid Leave">Unpaid Leave / LWOP</option>
                             </select>
+                            <span id="leave_notice" class="inline-validation text-primary"></span>
                         </div>
                         <div class="row">
                             <div class="col-md-6 form-group">
                                 <label class="text-muted text-xs font-weight-bold text-uppercase">Start Date</label>
-                                <input type="date" class="form-control shadow-sm" id="start_date" onchange="updateDateLimits()" required <?php echo $hasActiveLeave ? 'disabled' : ''; ?>>
+                                <input type="text" class="form-control shadow-sm bg-white" id="start_date" placeholder="Mmm/dd/yyyy" required readonly disabled>
                             </div>
                             <div class="col-md-6 form-group">
                                 <label class="text-muted text-xs font-weight-bold text-uppercase">End Date</label>
-                                <input type="date" class="form-control shadow-sm" id="end_date" required <?php echo $hasActiveLeave ? 'disabled' : ''; ?>>
+                                <input type="text" class="form-control shadow-sm bg-white" id="end_date" placeholder="Mmm/dd/yyyy" required readonly disabled>
                             </div>
                         </div>
                         <div class="form-group mb-0">
                             <label class="text-muted text-xs font-weight-bold text-uppercase">Reason for Leave</label>
-                            <textarea class="form-control shadow-sm" id="reason" rows="4" placeholder="Briefly explain your reason..." required <?php echo $hasActiveLeave ? 'disabled' : ''; ?>></textarea>
+                            <textarea class="form-control shadow-sm" id="reason" rows="4" placeholder="Briefly explain your reason..." required <?php echo $isLocked ? 'disabled' : ''; ?>></textarea>
                         </div>
                     </div>
                     
                     <div class="card-footer bg-light border-top-0 py-3">
-                        <button type="submit" class="btn btn-dark btn-block font-weight-bold shadow-sm" style="border-radius: 6px;" <?php echo $hasActiveLeave ? 'disabled' : ''; ?>>
+                        <button type="submit" class="btn btn-dark btn-block font-weight-bold shadow-sm" style="border-radius: 6px;" <?php echo $isLocked ? 'disabled' : ''; ?>>
                             <i class="fas fa-paper-plane mr-2"></i> Submit to HR
                         </button>
                     </div>
@@ -235,7 +316,6 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
                       <th>Duration</th>
                       <th>Days</th>
                       <th>Status</th>
-                      <th>HR Remarks</th> 
                     </tr>
                     </thead>
                     <tbody>
@@ -260,19 +340,6 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
                                   else echo '<span class="badge bg-light text-dark border px-2 py-1"><i class="fas fa-clock mr-1"></i> Pending</span>';
                               ?>
                           </td>
-                          <td class="align-middle text-left" style="max-width: 200px;">
-                              <?php if($row['status'] == 'Rejected' && !empty($row['remarks'])): ?>
-                                  <small class="text-danger font-weight-bold font-italic">
-                                      <i class="fas fa-info-circle mr-1"></i> <?php echo htmlspecialchars($row['remarks']); ?>
-                                  </small>
-                              <?php elseif($row['status'] == 'Approved' && !empty($row['remarks'])): ?>
-                                  <small class="text-success font-weight-bold font-italic">
-                                      <i class="fas fa-comment-dots mr-1"></i> <?php echo htmlspecialchars($row['remarks']); ?>
-                                  </small>
-                              <?php else: ?>
-                                  <span class="text-muted">-</span>
-                              <?php endif; ?>
-                          </td>
                         </tr>
                         <?php endwhile; endif; ?>
                     </tbody>
@@ -289,6 +356,7 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
 
 <?php include '../includes/footer.php'; ?>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 
@@ -301,7 +369,6 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
       });
   });
 
-  // Pass PHP balances to JavaScript
   const leaveBalances = {
       'Vacation Leave': <?php echo $vl_left; ?>,
       'Sick Leave': <?php echo $sl_left; ?>,
@@ -310,54 +377,115 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
       'Solo Parent Leave': <?php echo $solo_left; ?>,
       'VAWC Leave': <?php echo $vawc_left; ?>,
       'Emergency Leave': <?php echo $el_left; ?>,
-      'Unpaid Leave': 999 // Unlimited (Leave Without Pay)
+      'Unpaid Leave': 999 
   };
 
-  const hasActiveLeave = <?php echo $hasActiveLeave ? 'true' : 'false'; ?>;
+  const isLocked = <?php echo $isLocked ? 'true' : 'false'; ?>;
 
-  // Dynamically limit the End Date calendar based on available PH Law balances
-  function updateDateLimits() {
-      const leaveType = document.getElementById('leave_type').value;
-      const startDateInput = document.getElementById('start_date');
-      const endDateInput = document.getElementById('end_date');
+  const phHolidays = [
+      "2026-01-01", "2026-04-02", "2026-04-03", "2026-04-09", "2026-05-01", 
+      "2026-06-12", "2026-08-21", "2026-08-31", "2026-11-01", "2026-11-30", 
+      "2026-12-08", "2026-12-25", "2026-12-30"
+  ];
 
-      endDateInput.value = '';
+  let startPicker, endPicker;
+
+  function initializeCalendars() {
+      const commonConfig = {
+          dateFormat: "M/d/Y", // Flatpickr format for Mmm/dd/yyyy
+          disableMobile: "true",
+          onDayCreate: function(dObj, dStr, fp, dayElem) {
+              const dateStr = dayElem.dateObj.toISOString().split('T')[0];
+              if (phHolidays.includes(dateStr)) {
+                  dayElem.classList.add("ph-holiday");
+                  dayElem.title = "Philippine Holiday";
+              }
+          }
+      };
+
+      startPicker = flatpickr("#start_date", {
+          ...commonConfig,
+          onChange: function(selectedDates, dateStr) {
+              if (selectedDates.length > 0) {
+                  document.getElementById('end_date').disabled = false;
+                  updateEndDateLimits(selectedDates[0]);
+                  
+                  // Auto-fill end date so single-day leaves do not require selecting again
+                  endPicker.setDate(selectedDates[0]);
+              }
+          }
+      });
+
+      endPicker = flatpickr("#end_date", {
+          ...commonConfig
+      });
+  }
+
+  // Handle Dynamic Validation & Notice Periods based on Leave Type
+  document.getElementById('leave_type').addEventListener('change', function() {
+      const type = this.value;
+      const noticeLabel = document.getElementById('leave_notice');
+      const startInput = document.getElementById('start_date');
       
-      if (leaveType && startDateInput.value) {
-          let maxDaysAllowed = leaveBalances[leaveType];
+      startInput.disabled = false;
+      startPicker.clear();
+      endPicker.clear();
+      document.getElementById('end_date').disabled = true;
 
-          if (maxDaysAllowed <= 0) {
-              Swal.fire({
-                  icon: 'warning',
-                  title: 'Zero Balance',
-                  text: `You have 0 days left for ${leaveType}.`
-              });
-              startDateInput.value = '';
-              return;
-          }
+      if (leaveBalances[type] <= 0) {
+          // Assuming SweetAlert2 is loaded globally in your project
+          Swal.fire({ icon: 'warning', title: 'Zero Balance', text: `You have 0 days left for ${type}.` });
+          this.value = '';
+          startInput.disabled = true;
+          noticeLabel.innerText = '';
+          return;
+      }
 
-          endDateInput.min = startDateInput.value;
+      let minStartDate = new Date(); 
 
-          if (maxDaysAllowed !== 999) {
-              let startDateObj = new Date(startDateInput.value);
-              startDateObj.setDate(startDateObj.getDate() + (maxDaysAllowed - 1));
-              let maxDateStr = startDateObj.toISOString().split('T')[0];
-              endDateInput.max = maxDateStr;
-          } else {
-              endDateInput.removeAttribute('max');
-          }
+      if (type === 'Vacation Leave') {
+          minStartDate.setDate(minStartDate.getDate() + 5); // Must file 5 days ahead
+          startPicker.set('minDate', minStartDate);
+          noticeLabel.className = 'inline-validation text-warning';
+          noticeLabel.innerHTML = '<i class="fas fa-info-circle"></i> Requires 5 days advance notice.';
+      } 
+      else if (type === 'Sick Leave' || type === 'Emergency Leave') {
+          minStartDate.setDate(minStartDate.getDate() - 3); // Can file up to 3 days retroactively
+          startPicker.set('minDate', minStartDate);
+          noticeLabel.className = 'inline-validation text-success';
+          noticeLabel.innerHTML = '<i class="fas fa-check-circle"></i> Can be filed today or up to 3 days retroactive.';
+      } 
+      else {
+          minStartDate.setDate(minStartDate.getDate() + 7); // Default 7 days advance notice for long leaves
+          startPicker.set('minDate', minStartDate);
+          noticeLabel.className = 'inline-validation text-primary';
+          noticeLabel.innerHTML = '<i class="fas fa-info-circle"></i> Requires 7 days advance notice for this type.';
+      }
+  });
+
+  function updateEndDateLimits(startDateObj) {
+      const type = document.getElementById('leave_type').value;
+      const maxDaysAllowed = leaveBalances[type];
+
+      endPicker.set("minDate", startDateObj);
+
+      if (maxDaysAllowed !== 999) {
+          let maxDateObj = new Date(startDateObj);
+          maxDateObj.setDate(maxDateObj.getDate() + (maxDaysAllowed - 1));
+          endPicker.set("maxDate", maxDateObj);
+      } else {
+          endPicker.set("maxDate", null); 
       }
   }
 
   function submitLeave(event) {
       event.preventDefault(); 
 
-      // Active Leave Lockout Mechanism
-      if (hasActiveLeave) {
+      if (isLocked) {
           Swal.fire({
               icon: 'error',
-              title: 'Action Blocked',
-              text: 'You cannot file a new request until your current active leave has officially finished.',
+              title: 'Form Locked',
+              text: 'You cannot file a leave at this time due to system cooldown or an active leave.',
               confirmButtonColor: '#212529'
           });
           return; 
@@ -368,12 +496,19 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
       let endDate = document.getElementById('end_date').value;
       let reason = document.getElementById('reason').value; 
 
-      if(new Date(endDate) < new Date(startDate)) {
+      if (!leaveType || !startDate || !endDate) {
           Swal.fire({
-              icon: 'error', title: 'Invalid Dates', text: 'End date cannot be earlier than the start date!', confirmButtonColor: '#212529'
+              icon: 'warning', title: 'Incomplete Form', text: 'Please select dates.', confirmButtonColor: '#212529'
           });
           return;
       }
+
+      // Convert format for backend consistency just in case processing expects standard Y-m-d
+      let jsStartObj = startPicker.selectedDates[0];
+      let jsEndObj = endPicker.selectedDates[0];
+      
+      let formattedStartForDB = jsStartObj.getFullYear() + "-" + String(jsStartObj.getMonth() + 1).padStart(2, '0') + "-" + String(jsStartObj.getDate()).padStart(2, '0');
+      let formattedEndForDB = jsEndObj.getFullYear() + "-" + String(jsEndObj.getMonth() + 1).padStart(2, '0') + "-" + String(jsEndObj.getDate()).padStart(2, '0');
 
       Swal.fire({
           title: 'Submit Leave Request?',
@@ -387,8 +522,8 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
           if (result.isConfirmed) {
               let formData = new FormData();
               formData.append('leave_type', leaveType);
-              formData.append('start_date', startDate);
-              formData.append('end_date', endDate);
+              formData.append('start_date', formattedStartForDB); // Passing clean DB format
+              formData.append('end_date', formattedEndForDB); // Passing clean DB format
               formData.append('reason', reason);
             
               fetch('process_leave.php', {
@@ -399,7 +534,7 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
               .then(data => {
                   if(data.status === 'success') {
                       Swal.fire({
-                          title: 'Submitted!', text: 'Your leave request has been securely forwarded to HR for approval.', icon: 'success', confirmButtonColor: '#212529'
+                          title: 'Submitted!', text: 'Request forwarded. Cooldown period is now active.', icon: 'success', confirmButtonColor: '#212529'
                       }).then(() => { window.location.reload(); });
                   } else {
                       Swal.fire('Error', data.message || 'Could not save the request.', 'error');
@@ -410,5 +545,10 @@ $el_left = max(0, 5 - ($usedLeaves['Emergency Leave'] ?? 0)); // Standard Practi
               });
           }
       });
+  }
+
+  // Only initialize interaction if user isn't locked out
+  if (!isLocked) {
+      initializeCalendars();
   }
 </script>

@@ -1,4 +1,28 @@
-<?php session_start(); ?>
+<?php 
+session_start(); 
+
+// 1. STRICT AUTO-LOGOUT ON BACK NAVIGATION
+// If a user clicks "Back" and lands on this login page, we assume they are leaving the system.
+// We instantly destroy their session and cookies.
+if (isset($_SESSION['role'])) {
+    $_SESSION = array();
+    
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    
+    session_destroy();
+}
+
+// 2. Force the browser to NEVER cache the login page
+header("Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

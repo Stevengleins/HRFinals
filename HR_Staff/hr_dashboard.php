@@ -2,11 +2,16 @@
 session_start();
 require '../database.php';
 
-// Strict Security Check: ONLY HR Staff can access this dashboard
+// 1. Strict Security Check
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'HR Staff') {
     header("Location: ../index.php");
     exit();
 }
+
+// 2. THE FIX: Nuclear Cache-Busting Headers
+header("Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // Forces immediate expiration
 
 date_default_timezone_set('Asia/Manila');
 $today = date('Y-m-d');

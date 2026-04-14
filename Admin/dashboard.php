@@ -2,15 +2,19 @@
 session_start();
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit();
 }
+
+// THE FIX: Clear Browser Cache for Secure Pages
+header("Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // Forces browser to treat the page as expired immediately
 
 include('../database.php'); 
 include('../includes/admin_header.php');
 
 $admin_id = $_SESSION['user_id'];
-
 // --- 1. LIVE METRICS ---
 $empCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE role = 'Employee' AND status = 1")->fetch_assoc()['count'];
 $hrCount = $mysql->query("SELECT COUNT(*) as count FROM user WHERE role = 'HR Staff' AND status = 1")->fetch_assoc()['count'];

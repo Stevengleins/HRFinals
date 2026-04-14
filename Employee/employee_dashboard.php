@@ -7,10 +7,15 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Employee') {
     exit();
 }
 
+// 2. THE FIX: Nuclear Cache-Busting Headers
+header("Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // Forces immediate expiration
+
 require '../database.php'; 
 
 $title = "Employee Dashboard | WorkForcePro";
-require '../includes/employee_header.php'; 
+require '../includes/employee_header.php';
 
 $user_id = $_SESSION['user_id'];
 $query = "
