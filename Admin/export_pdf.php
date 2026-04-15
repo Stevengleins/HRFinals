@@ -12,7 +12,7 @@ $displayTitle = "Official Report";
 $reportData = '';
 
 // ==========================================
-// 1. USERS DIRECTORY EXPORT
+// 1. USERS DIRECTORY EXPORT (FIXED)
 // ==========================================
 if ($type === 'users') {
     $title = "Employee_Directory_" . date('Y_m_d');
@@ -63,6 +63,84 @@ if ($type === 'users') {
         $reportData .= "<tr><td colspan='6' style='text-align:center; color: #7f8c8d;'>No active employees found.</td></tr>";
     }
     $reportData .= "</tbody></table>";
+
+// ==========================================
+// 1.5. NEW: INDIVIDUAL EMPLOYEE CV EXPORT
+// ==========================================
+} elseif ($type === 'single_user') {
+    $userId = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
+    
+    $query = $mysql->query("
+        SELECT u.email as u_email, u.role as u_role, u.first_name as u_first, u.last_name as u_last, e.* FROM user u 
+        LEFT JOIN employee_details e ON u.user_id = e.user_id
+        WHERE u.user_id = $userId
+    ");
+    $user = $query->fetch_assoc();
+
+    if ($user) {
+        $f_name = !empty($user['e_first']) ? $user['e_first'] : $user['u_first'];
+        $m_name = !empty($user['middle_name']) ? $user['middle_name'] : '';
+        $l_name = !empty($user['e_last']) ? $user['e_last'] : $user['u_last'];
+        $s_name = !empty($user['suffix']) ? $user['suffix'] : '';
+        
+        $full_name = trim("$f_name $m_name $l_name $s_name");
+        $title = "Curriculum_Vitae_" . str_replace(' ', '_', $full_name);
+        $displayTitle = "Employee Curriculum Vitae";
+
+        $email = !empty($user['email']) ? $user['email'] : $user['u_email'];
+        $role = !empty($user['role']) ? $user['role'] : $user['u_role'];
+        $position = !empty($user['position']) ? $user['position'] : 'Not Assigned';
+        $mobile = !empty($user['mobile_number']) ? $user['mobile_number'] : 'N/A';
+        $address = !empty($user['address']) ? $user['address'] : 'N/A';
+        $gender = !empty($user['gender']) ? $user['gender'] : 'N/A';
+        $birthDate = !empty($user['birth_date']) ? date('F d, Y', strtotime($user['birth_date'])) : 'N/A';
+        $joinDate = !empty($user['join_date']) ? date('F d, Y', strtotime($user['join_date'])) : 'N/A';
+        $shiftStart = !empty($user['shift_start']) ? date('h:i A', strtotime($user['shift_start'])) : '08:00 AM';
+        $shiftEnd = !empty($user['shift_end']) ? date('h:i A', strtotime($user['shift_end'])) : '05:00 PM';
+        
+        $avatarSrc = "https://ui-avatars.com/api/?name=" . urlencode($full_name) . "&background=343a40&color=ffffff&size=128";
+
+        // BEAUTIFUL 2-COLUMN CV LAYOUT
+        $reportData = "
+        <div style='padding: 20px;'>
+            <table width='100%' style='border-bottom: 2px solid #2c3e50; padding-bottom: 20px; margin-bottom: 20px; border:none;'>
+                <tr style='border:none; background: transparent;'>
+                    <td width='120' style='border:none; padding: 0;'>
+                        <img src='{$avatarSrc}' style='width: 100px; height: 100px; border-radius: 50%; border: 3px solid #dee2e6;'>
+                    </td>
+                    <td style='border:none; vertical-align: middle; padding: 0;'>
+                        <h1 style='margin: 0; font-size: 28px; color: #212529;'>{$full_name}</h1>
+                        <h3 style='margin: 5px 0 0 0; font-size: 18px; color: #6c757d; font-weight: normal;'>{$position}</h3>
+                        <span style='display: inline-block; margin-top: 8px; padding: 4px 10px; background: #e9ecef; color: #495057; border-radius: 4px; font-size: 12px; font-weight: bold;'>SYSTEM ROLE: " . strtoupper($role) . "</span>
+                    </td>
+                </tr>
+            </table>
+
+            <table width='100%' style='border:none;'>
+                <tr style='border:none; background: transparent;'>
+                    <td width='50%' style='border:none; padding: 0 20px 0 0; vertical-align: top;'>
+                        <h4 style='border-bottom: 1px solid #dee2e6; padding-bottom: 8px; color: #212529; margin-bottom: 15px;'>Personal Information</h4>
+                        <table style='width:100%; border:none;'>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d; width: 40%;'>Email:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$email}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Mobile:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$mobile}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Gender:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$gender}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Birth Date:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$birthDate}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d; vertical-align: top;'>Address:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$address}</td></tr>
+                        </table>
+                    </td>
+                    <td width='50%' style='border:none; padding: 0 0 0 20px; vertical-align: top;'>
+                        <h4 style='border-bottom: 1px solid #dee2e6; padding-bottom: 8px; color: #212529; margin-bottom: 15px;'>Employment Details</h4>
+                        <table style='width:100%; border:none;'>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d; width: 40%;'>Employee ID:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>#".str_pad($userId, 4, '0', STR_PAD_LEFT)."</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Join Date:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$joinDate}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Work Shift:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #212529;'>{$shiftStart} - {$shiftEnd}</td></tr>
+                            <tr style='border:none; background: transparent;'><td style='border:none; padding: 5px 0; color: #6c757d;'>Status:</td><td style='border:none; padding: 5px 0; font-weight: bold; color: #28a745;'>Active User</td></tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </div>";
+    }
 
 // ==========================================
 // 2. DASHBOARD DAILY ATTENDANCE EXPORT
@@ -326,7 +404,6 @@ if ($type === 'users') {
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
         
         #pdf-document {
@@ -336,7 +413,6 @@ if ($type === 'users') {
             background: #fff;
         }
         
-        /* THE CLEAN DESIGN: White Header with bottom border */
         .header {
             background-color: #ffffff; 
             color: #000000;
@@ -380,18 +456,13 @@ if ($type === 'users') {
             padding: 25px 35px;
         }
         
-        /* SPREADSHEET TABLE STYLING */
         table {
             width: 100%;
             border-collapse: collapse; 
             margin-bottom: 20px;
         }
-        tr {
-            page-break-inside: avoid;
-        }
-        thead {
-            display: table-header-group;
-        }
+        tr { page-break-inside: avoid; }
+        thead { display: table-header-group; }
         th, td {
             border: 1px solid #dee2e6; 
             padding: 10px 12px; 
@@ -409,9 +480,7 @@ if ($type === 'users') {
             font-size: 12px;
             letter-spacing: 0.5px;
         }
-        tr:nth-child(even) { 
-            background-color: #f8f9fa; 
-        }
+        tr:nth-child(even) { background-color: #f8f9fa; }
         
         .footer {
             text-align: left;
@@ -424,7 +493,7 @@ if ($type === 'users') {
 <body>
 
     <div class="loader-overlay" id="loader">
-        <h2 style="color: #2c3e50; margin-bottom: 5px;">Generating Spreadsheet PDF...</h2>
+        <h2 style="color: #2c3e50; margin-bottom: 5px;">Generating PDF...</h2>
         <p style="color: #7f8c8d;">Please wait, your download will begin automatically.</p>
     </div>
 

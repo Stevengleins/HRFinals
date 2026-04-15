@@ -8,7 +8,6 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'Admin') {
 
 include('../database.php'); 
 
-// NEW: Now selecting e.shift_start and e.shift_end
 $query = "
     SELECT 
         u.user_id, 
@@ -40,7 +39,6 @@ include('../includes/admin_header.php');
 <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap4.min.css">
 
 <style>
-    /* Clean Table Styling */
     .table-custom thead th {
         background-color: #f8f9fa;
         border-bottom: 2px solid #dee2e6;
@@ -112,12 +110,11 @@ include('../includes/admin_header.php');
                   <th>Position</th>
                   <th>System Role</th>
                   <th>Email Address</th>    
-                  <th class="text-center">Details</th>
+                  <th class="text-center">Action</th>
                 </tr>
               </thead>
               <tbody>
                 <?php if($result && $result->num_rows > 0): while($row = $result->fetch_assoc()): 
-                    // Smart Full Name Construction
                     $f_name = !empty($row['e_first']) ? $row['e_first'] : $row['u_first'];
                     $m_name = !empty($row['middle_name']) ? $row['middle_name'] : '';
                     $l_name = !empty($row['e_last']) ? $row['e_last'] : $row['u_last'];
@@ -131,11 +128,9 @@ include('../includes/admin_header.php');
                     
                     $full_name = htmlspecialchars(implode(' ', $name_parts));
                     
-                    // Fallbacks
                     $display_email = !empty($row['email']) ? $row['email'] : $row['u_email'];
                     $display_role  = !empty($row['role']) ? $row['role'] : $row['u_role'];
                     
-                    // Avatar logic WITH PHYSICAL FILE CHECK
                     $rawImagePath = trim((string)$row['profile_image']);
                     if (!empty($rawImagePath) && file_exists(__DIR__ . '/../' . $rawImagePath)) {
                         $avatar = '../' . htmlspecialchars($rawImagePath);
@@ -143,7 +138,6 @@ include('../includes/admin_header.php');
                         $avatar = "https://ui-avatars.com/api/?name=" . urlencode($full_name) . "&background=343a40&color=ffffff";
                     }
                     
-                    // Formatting the shift for the Data attributes
                     $shift_start = !empty($row['shift_start']) ? $row['shift_start'] : '08:00:00';
                     $shift_end = !empty($row['shift_end']) ? $row['shift_end'] : '17:00:00';
                     $formatted_shift = date('h:i A', strtotime($shift_start)) . ' - ' . date('h:i A', strtotime($shift_end));
@@ -255,6 +249,12 @@ include('../includes/admin_header.php');
             </div>
         </div>
       </div>
+
+      <div class="modal-footer bg-light border-top-0 d-flex justify-content-center py-3">
+        <a href="#" id="exportCvBtn" target="_blank" class="btn btn-danger font-weight-bold px-4 shadow-sm" style="border-radius: 6px; width: 100%;">
+            <i class="fas fa-file-pdf mr-1"></i> Export Profile as CV (PDF)
+        </a>
+      </div>
       
     </div>
   </div>
@@ -289,7 +289,10 @@ include('../includes/admin_header.php');
         table.column(2).search(this.value).draw(); 
     });
 
+    // POPULATE MODAL & UPDATE EXPORT LINK
     $('.view-btn').on('click', function() {
+        let userId = $(this).data('id');
+
         $('#modalAvatar').attr('src', $(this).data('avatar'));
         $('#modalName').text($(this).data('name'));
         $('#modalPosition').text($(this).data('position'));
@@ -305,6 +308,9 @@ include('../includes/admin_header.php');
         $('#modalJoin').text($(this).data('join'));
         $('#modalAddress').text($(this).data('address'));
         $('#modalShift').text($(this).data('shift'));
+
+        // Inject the exact User ID into the CV Export link
+        $('#exportCvBtn').attr('href', 'export_pdf.php?type=single_user&user_id=' + userId);
 
         $('#viewProfileModal').modal('show');
     });
